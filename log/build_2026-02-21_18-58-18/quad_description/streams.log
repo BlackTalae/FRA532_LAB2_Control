@@ -1,0 +1,41 @@
+[0.008s] Invoking command in '/home/talae/FRA532_LAB2_Control/build/quad_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /home/talae/FRA532_LAB2_Control/build/quad_description -- -j20 -l20
+[0.031s] Invoked command in '/home/talae/FRA532_LAB2_Control/build/quad_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /home/talae/FRA532_LAB2_Control/build/quad_description -- -j20 -l20
+[0.036s] Invoking command in '/home/talae/FRA532_LAB2_Control/build/quad_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /home/talae/FRA532_LAB2_Control/build/quad_description
+[0.039s] -- Install configuration: ""
+[0.039s] -- Installing: /home/talae/FRA532_LAB2_Control/install/quad_description/lib/quad_description/PID.py
+[0.039s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/quadrotor_base.xacro
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/robot_params.xacro
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/gazebo_full.xacro
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/cw.stl
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.dae
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.jpg
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/ccw.stl
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/rsp.launch.py
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/sim.launch.py
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/config
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gz_bridge.yaml
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gaz_ros2_ctl_use_sim.yaml
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds/empty.sdf
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds/wind.sdf
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/rviz
+[0.040s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/rviz/sim.rviz
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/package_run_dependencies/quad_description
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/parent_prefix_path/quad_description
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/ament_prefix_path.sh
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/ament_prefix_path.dsv
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/path.sh
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/path.dsv
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.bash
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.sh
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.zsh
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.dsv
+[0.041s] -- Installing: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/package.dsv
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/packages/quad_description
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/cmake/quad_descriptionConfig.cmake
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/cmake/quad_descriptionConfig-version.cmake
+[0.041s] -- Up-to-date: /home/talae/FRA532_LAB2_Control/install/quad_description/share/quad_description/package.xml
+[0.042s] Invoked command in '/home/talae/FRA532_LAB2_Control/build/quad_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /home/talae/FRA532_LAB2_Control/build/quad_description
