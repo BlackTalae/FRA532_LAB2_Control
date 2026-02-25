@@ -95,6 +95,12 @@ def generate_launch_description():
         output="screen"
     )
 
+    lqr = Node(
+        package="quad_description",
+        executable="LQR.py",
+        output="screen"
+    )
+
     # Create LaunchDescription
     launch_description = LaunchDescription()
 
@@ -105,6 +111,6 @@ def generate_launch_description():
     launch_description.add_action(rsp) 
     launch_description.add_action(spawn_entity)
     launch_description.add_action(bridge)
-
+    launch_description.add_action(lqr)
 
     return launch_description

@@ -122,7 +122,7 @@ class LQR:
         Parameters
         ----------
         error : ndarray, shape (12,)
-            State error  x_ref − x_current  (positive = below target).
+            State error  x_ref - x_current  (positive = below target).
 
         Returns
         -------
@@ -186,10 +186,11 @@ class QuadrotorLQRNode(Node):
         self.Gamma = np.array([
             [ kF,       kF,       kF,       kF      ],   # Total thrust
             [-kF * L,   kF * L,   kF * L,  -kF * L  ],   # τ_roll  (body x)
-            [ kF * L,  -kF * L,   kF * L,  -kF * L  ],   # τ_pitch (body y)
-            [-kM,      -kM,        kM,       kM      ],   # τ_yaw   (body z)
+            [-kF * L,   kF * L,  -kF * L,   kF * L  ],   # τ_pitch (body y)
+            [-kM,      -kM,       kM,       kM      ],   # τ_yaw   (body z)
         ])
         self.Gamma_inv = np.linalg.inv(self.Gamma)
+        # self.get_logger().info(f'Gamma_inv: {self.Gamma_inv.tolist()}')
 
         # ── Build linearised model A, B ─────────────────────────────────────
         A, B = self._build_linear_model()
@@ -197,9 +198,9 @@ class QuadrotorLQRNode(Node):
         # ── LQR weight matrices Q and R ─────────────────────────────────────
         #   State: [x, y, z, φ, θ, ψ, ẋ, ẏ, ż, φ̇, θ̇, ψ̇]
         Q = np.diag([
-            10.0,  10.0,  20.0,   # position  x, y, z     — penalise position error
+            10.0,  10.0,  5.0,   # position  x, y, z     — penalise position error
             5.0,   5.0,   2.0,    # attitude  φ, θ, ψ
-            4.0,   4.0,   8.0,    # velocity  ẋ, ẏ, ż
+            4.0,   4.0,   40.0,    # velocity  ẋ, ẏ, ż
             1.0,   1.0,   1.0,    # ang-rate  φ̇, θ̇, ψ̇
         ])
         #   Input: [F_total, τ_roll, τ_pitch, τ_yaw]
@@ -212,7 +213,7 @@ class QuadrotorLQRNode(Node):
 
         K = lqr(A, B, Q, R)
         self.lqr_ctrl = LQR(K)
-        self.get_logger().info(f'LQR gain K computed  (shape {K.shape})')
+        self.get_logger().info(f'LQR gain K computed {K.tolist()}')
 
         # ── State ────────────────────────────────────────────────────────────
         self.pos_x = 0.0;  self.pos_y = 0.0;  self.pos_z = 0.0
@@ -241,8 +242,8 @@ class QuadrotorLQRNode(Node):
         self.create_timer(0.01, self._control_loop)
 
         # Live plot in a background thread
-        self._plot_lock = threading.Lock()
-        threading.Thread(target=self._plot_loop, daemon=True).start()
+        # self._plot_lock = threading.Lock()
+        # threading.Thread(target=self._plot_loop, daemon=True).start()
 
         self.get_logger().info(
             f'LQR node ready. Target → x={self.TARGET_X}, '
@@ -377,11 +378,19 @@ class QuadrotorLQRNode(Node):
         # ── Clamp total thrust ───────────────────────────────────────────────
         F_max = 4.0 * self.K_F * self.OMEGA_MAX ** 2
         F_total = float(np.clip(F_total, 0.0, F_max))
+        self.get_logger().info(f'u_corr: {u_corr[0]:.2f} N')
+        self.get_logger().info(f'F_total: {F_total:.2f} N')
+        self.get_logger().info(f'F_max: {F_max:.2f} N')
+        # self.get_logger().info(f'tau_roll: {tau_roll:.2f} N·m')
+        # self.get_logger().info(f'tau_pitch: {tau_pitch:.2f} N·m')
+        # self.get_logger().info(f'tau_yaw: {tau_yaw:.2f} N·m')
 
         # ── Motor mixing: solve for ωi² ──────────────────────────────────────
         wrench = np.array([F_total, tau_roll, tau_pitch, tau_yaw])
+        # wrench = np.array([self.F_hover, 0, 0, 0])
         omega_sq = self.Gamma_inv @ wrench          # [w0², w1², w2², w3²]
         omega_sq = np.clip(omega_sq, 0.0, self.OMEGA_MAX ** 2)
+        # self.get_logger().info(f'omega_sq: {omega_sq.tolist()} rad²/s²')
 
         omega = np.sqrt(omega_sq)
 
@@ -391,12 +400,12 @@ class QuadrotorLQRNode(Node):
         self.cmd_pub.publish(cmd)
 
         # ── Record for live plot ─────────────────────────────────────────────
-        t = now - self._t0
-        with self._plot_lock:
-            self.t_hist.append(t)
-            self.x_hist.append(self.pos_x);  self.tx_hist.append(self.TARGET_X)
-            self.y_hist.append(self.pos_y);  self.ty_hist.append(self.TARGET_Y)
-            self.z_hist.append(self.pos_z);  self.tz_hist.append(self.TARGET_Z)
+        # t = now - self._t0
+        # with self._plot_lock:
+        #     self.t_hist.append(t)
+        #     self.x_hist.append(self.pos_x);  self.tx_hist.append(self.TARGET_X)
+        #     self.y_hist.append(self.pos_y);  self.ty_hist.append(self.TARGET_Y)
+        #     self.z_hist.append(self.pos_z);  self.tz_hist.append(self.TARGET_Z)
 
     # ── Live matplotlib plot ────────────────────────────────────────────────
     def _plot_loop(self):

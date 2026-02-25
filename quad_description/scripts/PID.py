@@ -245,10 +245,10 @@ class QuadrotorPIDNode(Node):
 
         # --- Motor mixing ----------------------
         base = self.omega_hover
-        w0 = base + dz + pitch_cmd - roll_cmd + yaw_cmd   # front-right CCW
-        w1 = base + dz - pitch_cmd + roll_cmd + yaw_cmd   # rear-left   CCW
-        w2 = base + dz + pitch_cmd + roll_cmd - yaw_cmd   # front-left  CW
-        w3 = base + dz - pitch_cmd - roll_cmd - yaw_cmd   # rear-right  CW
+        w0 = base + dz + yaw_cmd + pitch_cmd + roll_cmd   # front-right CCW
+        w1 = base + dz + yaw_cmd - pitch_cmd - roll_cmd   # rear-left   CCW
+        w2 = base + dz + yaw_cmd - pitch_cmd + roll_cmd   # front-left  CW
+        w3 = base + dz - yaw_cmd - pitch_cmd + roll_cmd   # rear-right  CW
 
         # Clamp to valid range
         def clamp(v):
