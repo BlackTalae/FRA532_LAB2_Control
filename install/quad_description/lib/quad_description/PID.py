@@ -58,20 +58,24 @@ from nav_msgs.msg import Odometry
 from actuator_msgs.msg import Actuators
 
 
-# ─────────────────────────────────────────────
-#  Generic PID controller
-# ─────────────────────────────────────────────
+# ---------------------------------------------
+# PID controller Class
+# ---------------------------------------------
 class PID:
     def __init__(self, kp: float, ki: float, kd: float,
                  out_min: float = -float('inf'),
                  out_max: float =  float('inf'),
                  windup_limit: float = 500.0):
+
         self.kp = kp
         self.ki = ki
         self.kd = kd
+
         self.out_min = out_min
         self.out_max = out_max
+
         self.windup_limit = windup_limit   # anti-windup clamp on integral
+
         self._integral = 0.0
         self._prev_error = 0.0
 
@@ -80,85 +84,87 @@ class PID:
         self._prev_error = 0.0
 
     def compute(self, error: float, dt: float) -> float:
+
         if dt <= 1e-6:
             return 0.0
+
         self._integral += error * dt
-        self._integral = max(-self.windup_limit,
-                             min(self.windup_limit, self._integral))
+        self._integral = max(-self.windup_limit, min(self.windup_limit, self._integral)) # clamp integral
+
         derivative = (error - self._prev_error) / dt
         self._prev_error = error
+
         output = self.kp * error + self.ki * self._integral + self.kd * derivative
-        return max(self.out_min, min(self.out_max, output))
+
+        return max(self.out_min, min(self.out_max, output)) # clamp output
 
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  ROS 2 Node
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 class QuadrotorPIDNode(Node):
 
-    # ── Physical constants ──────────────────────
+    # --- Physical constants -------------------
     MASS       = 1.5          # kg
     GRAVITY    = 9.81         # m/s²
     K_F        = 8.54858e-06  # N / (rad/s)²
     OMEGA_MAX  = 1500.0       # rad/s
 
-    # ── Target pose (setpoint) — edit here to change hover goal ──
+    # --- Target pose (setpoint) -- edit here to change hover goal ---
     TARGET_X   = 0.0   # m
     TARGET_Y   = 0.0   # m
     TARGET_Z   = 1.0   # m
     TARGET_YAW = 0.0   # rad
 
-    # ── History length for the live plot ────────
+    # --- History length for the live plot ---
     HISTORY_LEN = 600   # samples at 100 Hz → 6 s window
 
     def __init__(self):
         super().__init__('quadrotor_pid_node')
 
         # Hover motor speed (rad/s)
-        self.omega_hover = math.sqrt(
-            self.MASS * self.GRAVITY / (4.0 * self.K_F))
-        self.get_logger().info(
-            f'Hover motor speed: {self.omega_hover:.1f} rad/s')
+        self.omega_hover = math.sqrt(self.MASS * self.GRAVITY / (4.0 * self.K_F))
+        self.get_logger().info(f'Hover motor speed: {self.omega_hover:.1f} rad/s')
 
-        # ── PID controllers ─────────────────────
-        # --- Altitude (Z) ---
-        # Output unit: rad/s added to each motor
-        # Tune Kp first: at 1 m error → Kp * 1 rad/s change per motor
+        # --- PID controllers -------------------
         self.pid_z = PID(kp=50.0, ki=2.0, kd=10.0,
                          out_min=-400.0, out_max=400.0,
                          windup_limit=300.0)
 
-        # --- Horizontal X (via front/rear differential → pitch) ---
-        # Output unit: rad/s differential
         self.pid_x = PID(kp=30.0, ki=2.0, kd=40.0,
                          out_min=-150.0, out_max=150.0,
                          windup_limit=100.0)
 
-        # --- Horizontal Y (via left/right differential → roll) ---
         self.pid_y = PID(kp=30.0, ki=2.0, kd=40.0,
                          out_min=-150.0, out_max=150.0,
                          windup_limit=100.0)
 
-        # --- Yaw ---
         self.pid_yaw = PID(kp=50.0, ki=0.0, kd=30.0,
                            out_min=-100.0, out_max=100.0)
 
-        # ── State ───────────────────────────────
-        self.pos_x = self.pos_y = self.pos_z = 0.0
-        self.vel_x = self.vel_y = self.vel_z = 0.0
-        self.roll = self.pitch = self.yaw = 0.0
+        # --- State -------------------------------
+        self.pos_x = 0.0
+        self.pos_y = 0.0
+        self.pos_z = 0.0
+        self.vel_x = 0.0
+        self.vel_y = 0.0
+        self.vel_z = 0.0
+        self.roll = 0.0
+        self.pitch = 0.0
+        self.yaw = 0.0
+
         self._odom_received = False
         self._last_time: float | None = None
         self._t0: float | None = None
 
-        # ── History deques for plotting ─────────
+        # --- History deques for plotting ----------
         n = self.HISTORY_LEN
         self.t_hist   = deque(maxlen=n)
         self.x_hist   = deque(maxlen=n);  self.tx_hist = deque(maxlen=n)
         self.y_hist   = deque(maxlen=n);  self.ty_hist = deque(maxlen=n)
         self.z_hist   = deque(maxlen=n);  self.tz_hist = deque(maxlen=n)
 
-        # ── ROS interfaces ───────────────────────
+        # --- ROS interfaces ----------------------
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self._odom_cb, 10)
         self.cmd_pub  = self.create_publisher(
@@ -175,7 +181,7 @@ class QuadrotorPIDNode(Node):
             f'PID node ready. Target → x={self.TARGET_X}, '
             f'y={self.TARGET_Y}, z={self.TARGET_Z} m')
 
-    # ── Odometry callback ────────────────────────
+    # --- Odometry callback -----------------------
     def _odom_cb(self, msg: Odometry):
         p = msg.pose.pose.position
         v = msg.twist.twist.linear
@@ -200,26 +206,29 @@ class QuadrotorPIDNode(Node):
 
         self._odom_received = True
 
-    # ── Main control loop ────────────────────────
+    # --- Main control loop -----------------------
     def _control_loop(self):
+        # Wait for odometry
         if not self._odom_received:
             return
 
         now = self.get_clock().now().nanoseconds * 1e-9
+
         if self._last_time is None:
             self._last_time = now
             self._t0 = now
             return
+
         dt = now - self._last_time
         self._last_time = now
         if dt <= 1e-6:
             return
 
-        # ── Z altitude PID ────────────────────
+        # --- Z altitude PID ----------------------
         z_err = self.TARGET_Z - self.pos_z
         dz = self.pid_z.compute(z_err, dt)
 
-        # ── X / Y position: rotate error to body frame ──
+        # --- X / Y position: rotate error to body frame ---
         dx_w = self.TARGET_X - self.pos_x
         dy_w = self.TARGET_Y - self.pos_y
         cy, sy = math.cos(self.yaw), math.sin(self.yaw)
@@ -229,12 +238,12 @@ class QuadrotorPIDNode(Node):
         pitch_cmd =  self.pid_x.compute(dx_b, dt)   # + → nose up → forward
         roll_cmd  = -self.pid_y.compute(dy_b, dt)   # + → right down → right
 
-        # ── Yaw PID ──────────────────────────
+        # --- Yaw PID ---------------------------
         yaw_err = self.TARGET_YAW - self.yaw
-        yaw_err = (yaw_err + math.pi) % (2.0 * math.pi) - math.pi
+        yaw_err = (yaw_err + math.pi) % (2.0 * math.pi) - math.pi # wrap to [-pi, pi]
         yaw_cmd = self.pid_yaw.compute(yaw_err, dt)
 
-        # ── Motor mixing ─────────────────────
+        # --- Motor mixing ----------------------
         base = self.omega_hover
         w0 = base + dz + pitch_cmd - roll_cmd + yaw_cmd   # front-right CCW
         w1 = base + dz - pitch_cmd + roll_cmd + yaw_cmd   # rear-left   CCW
@@ -250,7 +259,7 @@ class QuadrotorPIDNode(Node):
         cmd.velocity = [clamp(w0), clamp(w1), clamp(w2), clamp(w3)]
         self.cmd_pub.publish(cmd)
 
-        # ── Record history ─────────────────────
+        # --- Record history ----------------------
         t = now - self._t0
         with self._plot_lock:
             self.t_hist.append(t)
@@ -258,7 +267,7 @@ class QuadrotorPIDNode(Node):
             self.y_hist.append(self.pos_y);   self.ty_hist.append(self.TARGET_Y)
             self.z_hist.append(self.pos_z);   self.tz_hist.append(self.TARGET_Z)
 
-    # ── Live matplotlib plot ─────────────────────
+    # --- Live matplotlib plot ------------------
     def _plot_loop(self):
         plt.ion()
         fig, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
@@ -303,9 +312,7 @@ class QuadrotorPIDNode(Node):
                 pass
 
 
-# ─────────────────────────────────────────────
-#  Entry point
-# ─────────────────────────────────────────────
+# --- Entry point -----------------------------
 def main(args=None):
     rclpy.init(args=args)
     node = QuadrotorPIDNode()

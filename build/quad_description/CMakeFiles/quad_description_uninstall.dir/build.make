@@ -53,10 +53,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/talae/FRA532_LAB2_Control/quad_description
+CMAKE_SOURCE_DIR = /home/pavaris/FRA532_LAB2_Control/quad_description
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/talae/FRA532_LAB2_Control/build/quad_description
+CMAKE_BINARY_DIR = /home/pavaris/FRA532_LAB2_Control/build/quad_description
 
 # Utility rule file for quad_description_uninstall.
 
@@ -67,7 +67,7 @@ include CMakeFiles/quad_description_uninstall.dir/compiler_depend.make
 include CMakeFiles/quad_description_uninstall.dir/progress.make
 
 CMakeFiles/quad_description_uninstall:
-	/usr/bin/cmake -P /home/talae/FRA532_LAB2_Control/build/quad_description/ament_cmake_uninstall_target/ament_cmake_uninstall_target.cmake
+	/usr/bin/cmake -P /home/pavaris/FRA532_LAB2_Control/build/quad_description/ament_cmake_uninstall_target/ament_cmake_uninstall_target.cmake
 
 quad_description_uninstall: CMakeFiles/quad_description_uninstall
 quad_description_uninstall: CMakeFiles/quad_description_uninstall.dir/build.make
@@ -82,6 +82,6 @@ CMakeFiles/quad_description_uninstall.dir/clean:
 .PHONY : CMakeFiles/quad_description_uninstall.dir/clean
 
 CMakeFiles/quad_description_uninstall.dir/depend:
-	cd /home/talae/FRA532_LAB2_Control/build/quad_description && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/talae/FRA532_LAB2_Control/quad_description /home/talae/FRA532_LAB2_Control/quad_description /home/talae/FRA532_LAB2_Control/build/quad_description /home/talae/FRA532_LAB2_Control/build/quad_description /home/talae/FRA532_LAB2_Control/build/quad_description/CMakeFiles/quad_description_uninstall.dir/DependInfo.cmake --color=$(COLOR)
+	cd /home/pavaris/FRA532_LAB2_Control/build/quad_description && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/pavaris/FRA532_LAB2_Control/quad_description /home/pavaris/FRA532_LAB2_Control/quad_description /home/pavaris/FRA532_LAB2_Control/build/quad_description /home/pavaris/FRA532_LAB2_Control/build/quad_description /home/pavaris/FRA532_LAB2_Control/build/quad_description/CMakeFiles/quad_description_uninstall.dir/DependInfo.cmake --color=$(COLOR)
 .PHONY : CMakeFiles/quad_description_uninstall.dir/depend
 

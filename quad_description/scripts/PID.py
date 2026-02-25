@@ -49,6 +49,7 @@ from collections import deque
 
 import matplotlib
 matplotlib.use('TkAgg')   # change to 'Qt5Agg' if TkAgg not available
+# matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
