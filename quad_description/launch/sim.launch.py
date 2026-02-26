@@ -104,6 +104,20 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}],
     )
 
+    mpc = Node(
+        package="quad_description",
+        executable="MPC.py",
+        output="screen",
+        parameters=[{'use_sim_time': True}],
+    )
+
+    trajectory = Node(
+        package="quad_description",
+        executable="send_trajectory.py",
+        output="screen",
+        parameters=[{'use_sim_time': True}],
+    )
+
     # Create LaunchDescription
     launch_description = LaunchDescription()
 
@@ -114,6 +128,8 @@ def generate_launch_description():
     launch_description.add_action(rsp) 
     launch_description.add_action(spawn_entity)
     launch_description.add_action(bridge)
-    launch_description.add_action(lqr)
+    # launch_description.add_action(lqr)   # ← LQR controller
+    launch_description.add_action(mpc)     # ← MPC controller
+    launch_description.add_action(trajectory)  # ← Trajectory / goal sender
 
     return launch_description

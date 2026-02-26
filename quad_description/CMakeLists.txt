@@ -22,6 +22,8 @@ find_package(ament_cmake REQUIRED)
 install(PROGRAMS
   scripts/PID.py
   scripts/LQR.py
+  scripts/MPC.py
+  scripts/send_trajectory.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -70,6 +70,7 @@ import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from actuator_msgs.msg import Actuators
+from geometry_msgs.msg import PoseStamped
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -154,11 +155,11 @@ class QuadrotorLQRNode(Node):
     # joint origins: (0.13, ±0.22) and (-0.13, ±0.20) → use 0.22 m
     L = 0.22   # m  (distance from CoM to rotor along body x/y axis)
 
-    # ── Target pose (setpoint) ─────────────────────────────────────────────
-    TARGET_X   = 1.0   # m
-    TARGET_Y   = 0.0   # m
-    TARGET_Z   = 1.0   # m
-    TARGET_YAW = 0.0   # rad
+    # ── Default target pose (overridden live by /target_pose topic) ───────────
+    DEFAULT_TARGET_X   = 0.0   # m
+    DEFAULT_TARGET_Y   = 0.0   # m
+    DEFAULT_TARGET_Z   = 1.0   # m
+    DEFAULT_TARGET_YAW = 0.0   # rad
 
     # ── Plot history ───────────────────────────────────────────────────────
     HISTORY_LEN = 600   # samples @ 100 Hz → 6 s window
@@ -215,6 +216,12 @@ class QuadrotorLQRNode(Node):
         self.lqr_ctrl = LQR(K)
         self.get_logger().info(f'LQR gain K computed {K.tolist()}')
 
+        # ── Dynamic target (updated by /target_pose) ────────────────────────
+        self.TARGET_X   = self.DEFAULT_TARGET_X
+        self.TARGET_Y   = self.DEFAULT_TARGET_Y
+        self.TARGET_Z   = self.DEFAULT_TARGET_Z
+        self.TARGET_YAW = self.DEFAULT_TARGET_YAW
+
         # ── State ────────────────────────────────────────────────────────────
         self.pos_x = 0.0;  self.pos_y = 0.0;  self.pos_z = 0.0
         self.vel_x = 0.0;  self.vel_y = 0.0;  self.vel_z = 0.0
@@ -233,17 +240,19 @@ class QuadrotorLQRNode(Node):
         self.z_hist  = deque(maxlen=n);  self.tz_hist = deque(maxlen=n)
 
         # ── ROS interfaces ───────────────────────────────────────────────────
-        self.odom_sub = self.create_subscription(
+        self.odom_sub   = self.create_subscription(
             Odometry, '/odom', self._odom_cb, 10)
-        self.cmd_pub  = self.create_publisher(
+        self.target_sub = self.create_subscription(
+            PoseStamped, '/target_pose', self._target_cb, 10)
+        self.cmd_pub    = self.create_publisher(
             Actuators, '/motor_commands', 10)
 
         # Control loop at 100 Hz
         self.create_timer(0.01, self._control_loop)
 
         self.get_logger().info(
-            f'LQR node ready. Target → x={self.TARGET_X}, '
-            f'y={self.TARGET_Y}, z={self.TARGET_Z} m')
+            f'LQR node ready. Listening on /target_pose. '
+            f'Default target → x={self.TARGET_X}, y={self.TARGET_Y}, z={self.TARGET_Z} m')
 
     # ── Linearised quadrotor model ──────────────────────────────────────────
     def _build_linear_model(self):
@@ -300,6 +309,19 @@ class QuadrotorLQRNode(Node):
 
         return A, B
 
+    # ── Target pose callback ────────────────────────────────────────────────
+    def _target_cb(self, msg: PoseStamped):
+        """Update the setpoint from the trajectory / goal publisher."""
+        self.TARGET_X = msg.pose.position.x
+        self.TARGET_Y = msg.pose.position.y
+        self.TARGET_Z = msg.pose.position.z
+
+        # Extract yaw from quaternion
+        q = msg.pose.orientation
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y ** 2 + q.z ** 2)
+        self.TARGET_YAW = math.atan2(siny, cosy)
+
     # ── Odometry callback ───────────────────────────────────────────────────
     def _odom_cb(self, msg: Odometry):
         p = msg.pose.pose.position
@@ -325,6 +347,9 @@ class QuadrotorLQRNode(Node):
         self.yaw = math.atan2(siny, cosy)
 
         self._odom_received = True
+
+        self.get_logger().info(
+            f'Odom: z={self.pos_z:.2f}')
 
     # ── Main control loop ───────────────────────────────────────────────────
     def _control_loop(self):

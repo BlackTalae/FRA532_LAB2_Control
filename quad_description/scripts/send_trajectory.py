@@ -1,191 +1,147 @@
 #!/usr/bin/env python3
 """
-Quadrotor PID Hover Controller
-================================
-Controls a quadrotor to hold a fixed position (x, y, z) using PID controllers.
-Subscribes to: /odom  (nav_msgs/msg/Odometry)
-Publishes to:  /motor_commands  (actuator_msgs/msg/Actuators)
+Trajectory Sender Node
+======================
+Publishes a sequence of 3D waypoints (x, y, z, yaw) as a
+geometry_msgs/PoseStamped message on the /target_pose topic.
 
-Physical parameters (from robot_params.xacro):
-  mass    = 1.5 kg
-  k_F     = 8.54858e-06  [N / (rad/s)^2]
-  k_M     = 0.06
-  omega_max = 1500 rad/s
+The active controller (LQR, MPC, PID …) subscribes to /target_pose and
+updates its setpoint accordingly.
 
-Hover motor speed:
-  4 * k_F * omega_h^2 = m * g
-  omega_h = sqrt(m*g / (4*k_F)) ≈ 656 rad/s
+Waypoint advancement:
+  The node subscribes to /odom and advances to the next waypoint once the
+  drone is within `POSITION_THRESHOLD` metres of the current one AND has
+  held that position for `DWELL_TIME` seconds.
 
-Motor layout (top view, X-config):
-        front (+x)
-          2   0
-      left     right
-          1   3
-        rear (-x)
+Edit the WAYPOINTS list to define your trajectory.
+Each entry is (x [m], y [m], z [m], yaw [rad]).
 
-  Motor 0: front-right (+x, -y)  CCW
-  Motor 1: rear-left   (-x, +y)  CCW
-  Motor 2: front-left  (+x, +y)  CW
-  Motor 3: rear-right  (-x, -y)  CW
+Usage:
+  ros2 run quad_description send_trajectory.py
 
-Mixing (in omega space, working with motor speed directly):
-  w0 = base + dz + pitch - roll + yaw   (front-right, CCW)
-  w1 = base + dz - pitch + roll + yaw   (rear-left,  CCW)
-  w2 = base + dz + pitch + roll - yaw   (front-left,  CW)
-  w3 = base + dz - pitch - roll - yaw   (rear-right,  CW)
-
-  where:
-    dz    = Z-PID output      [rad/s]  — altitude control
-    pitch = X-PID output      [rad/s]  — front/rear differential → pitches drone
-    roll  = Y-PID output      [rad/s]  — left/right differential  → rolls drone
-    yaw   = Yaw-PID output    [rad/s]  — CW vs CCW differential
-
-Tune order: Kp_z first (hover), then Kp_x/y, then Kd terms, finally Ki.
+Topics:
+  Publishes:   /target_pose  (geometry_msgs/msg/PoseStamped)
+  Subscribes:  /odom         (nav_msgs/msg/Odometry)
 """
 
 import math
-import threading
 from collections import deque
-
-import matplotlib
-matplotlib.use('TkAgg')   # change to 'Qt5Agg' if TkAgg not available
-import matplotlib.pyplot as plt
-import numpy as np
 
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
-from actuator_msgs.msg import Actuators
+from geometry_msgs.msg import PoseStamped
 
 
-# ---------------------------------------------
-# PID controller Class
-# ---------------------------------------------
-class PID:
-    def __init__(self, kp: float, ki: float, kd: float,
-                 out_min: float = -float('inf'),
-                 out_max: float =  float('inf'),
-                 windup_limit: float = 500.0):
-
-        self.kp = kp
-        self.ki = ki
-        self.kd = kd
-
-        self.out_min = out_min
-        self.out_max = out_max
-
-        self.windup_limit = windup_limit   # anti-windup clamp on integral
-
-        self._integral = 0.0
-        self._prev_error = 0.0
-
-    def reset(self):
-        self._integral = 0.0
-        self._prev_error = 0.0
-
-    def compute(self, error: float, dt: float) -> float:
-
-        if dt <= 1e-6:
-            return 0.0
-
-        self._integral += error * dt
-        self._integral = max(-self.windup_limit, min(self.windup_limit, self._integral)) # clamp integral
-
-        derivative = (error - self._prev_error) / dt
-        self._prev_error = error
-
-        output = self.kp * error + self.ki * self._integral + self.kd * derivative
-
-        return max(self.out_min, min(self.out_max, output)) # clamp output
+# ──────────────────────────────────────────────────────────────────────────────
+# Waypoint list  –  edit to define your trajectory
+# Each entry: (x [m], y [m], z [m], yaw [rad])
+# ──────────────────────────────────────────────────────────────────────────────
+WAYPOINTS = [
+    (0.0, 0.0, 1.0, 0.0),   # take-off / hover
+    (2.0, 0.0, 1.0, 0.0),   # fly +X
+    (2.0, 2.0, 1.0, 0.0),   # fly +Y
+    (0.0, 2.0, 1.5, 0.0),   # fly −X, gain altitude
+    (0.0, 0.0, 1.5, 0.0),   # return home (higher)
+    (0.0, 0.0, 0.3, 0.0),   # descend
+]
 
 
-# ---------------------------------------------
-#  ROS 2 Node
-# ---------------------------------------------
-class QuadrotorPIDNode(Node):
+class TrajectoryNode(Node):
 
-    # --- Physical constants -------------------
-    MASS       = 1.5          # kg
-    GRAVITY    = 9.81         # m/s²
-    K_F        = 8.54858e-06  # N / (rad/s)²
-    OMEGA_MAX  = 1500.0       # rad/s
-
-    # --- Target pose (setpoint) -- edit here to change hover goal ---
-    TARGET_X   = 0.0   # m
-    TARGET_Y   = 0.0   # m
-    TARGET_Z   = 1.0   # m
-    TARGET_YAW = 0.0   # rad
-
-    # --- History length for the live plot ---
-    HISTORY_LEN = 600   # samples at 100 Hz → 6 s window
+    # ── Tuning ─────────────────────────────────────────────────────────────
+    POSITION_THRESHOLD = 0.15   # m  – distance to waypoint before advancing
+    DWELL_TIME         = 1.5    # s  – seconds to hold before advancing
+    PUBLISH_HZ         = 20.0   # Hz – how often we republish the target
 
     def __init__(self):
-        super().__init__('quadrotor_pid_node')
+        super().__init__('trajectory_node')
 
-        # Hover motor speed (rad/s)
-        self.omega_hover = math.sqrt(self.MASS * self.GRAVITY / (4.0 * self.K_F))
-        self.get_logger().info(f'Hover motor speed: {self.omega_hover:.1f} rad/s')
+        self._waypoints  = WAYPOINTS
+        self._wp_idx     = 0
+        self._dwell_start: float | None = None
 
-        # --- PID controllers -------------------
-        self.pid_z = PID(kp=50.0, ki=2.0, kd=10.0,
-                         out_min=-400.0, out_max=400.0,
-                         windup_limit=300.0)
+        # Current drone pose
+        self._pos_x = 0.0
+        self._pos_y = 0.0
+        self._pos_z = 0.0
 
-        self.pid_x = PID(kp=30.0, ki=2.0, kd=40.0,
-                         out_min=-150.0, out_max=150.0,
-                         windup_limit=100.0)
-
-        self.pid_y = PID(kp=30.0, ki=2.0, kd=40.0,
-                         out_min=-150.0, out_max=150.0,
-                         windup_limit=100.0)
-
-        self.pid_yaw = PID(kp=50.0, ki=0.0, kd=30.0,
-                           out_min=-100.0, out_max=100.0)
-
-        # --- State -------------------------------
-        self.pos_x = 0.0
-        self.pos_y = 0.0
-        self.pos_z = 0.0
-        self.vel_x = 0.0
-        self.vel_y = 0.0
-        self.vel_z = 0.0
-        self.roll = 0.0
-        self.pitch = 0.0
-        self.yaw = 0.0
-
-        self._odom_received = False
-        self._last_time: float | None = None
-        self._t0: float | None = None
-
-        # --- History deques for plotting ----------
-        n = self.HISTORY_LEN
-        self.t_hist   = deque(maxlen=n)
-        self.x_hist   = deque(maxlen=n);  self.tx_hist = deque(maxlen=n)
-        self.y_hist   = deque(maxlen=n);  self.ty_hist = deque(maxlen=n)
-        self.z_hist   = deque(maxlen=n);  self.tz_hist = deque(maxlen=n)
-
-        # --- ROS interfaces ----------------------
-        self.odom_sub = self.create_subscription(
+        # ── ROS interfaces ────────────────────────────────────────────────
+        self._pub  = self.create_publisher(PoseStamped, '/target_pose', 10)
+        self._sub  = self.create_subscription(
             Odometry, '/odom', self._odom_cb, 10)
-        self.cmd_pub  = self.create_publisher(
-            Actuators, '/motor_commands', 10)
 
-        # Control loop at 100 Hz
-        self.create_timer(0.01, self._control_loop)
-
-        # Live plot in a background thread
-        self._plot_lock = threading.Lock()
-        threading.Thread(target=self._plot_loop, daemon=True).start()
+        dt = 1.0 / self.PUBLISH_HZ
+        self.create_timer(dt, self._timer_cb)
 
         self.get_logger().info(
-            f'PID node ready. Target → x={self.TARGET_X}, '
-            f'y={self.TARGET_Y}, z={self.TARGET_Z} m')
+            f'Trajectory node started.  {len(self._waypoints)} waypoints.')
+        self._log_current_wp()
+
+    # ── Odometry callback ───────────────────────────────────────────────────
+    def _odom_cb(self, msg: Odometry):
+        self._pos_x = msg.pose.pose.position.x
+        self._pos_y = msg.pose.pose.position.y
+        self._pos_z = msg.pose.pose.position.z
+
+    # ── Periodic publisher ──────────────────────────────────────────────────
+    def _timer_cb(self):
+        wp = self._waypoints[self._wp_idx]
+        tx, ty, tz, tyaw = wp
+
+        # ── Check if close enough to current waypoint ───────────────────────
+        dist = math.sqrt(
+            (self._pos_x - tx) ** 2 +
+            (self._pos_y - ty) ** 2 +
+            (self._pos_z - tz) ** 2
+        )
+
+        now = self.get_clock().now().nanoseconds * 1e-9
+
+        if dist < self.POSITION_THRESHOLD:
+            if self._dwell_start is None:
+                self._dwell_start = now
+            elif (now - self._dwell_start) >= self.DWELL_TIME:
+                # Advance to next waypoint
+                self._wp_idx = (self._wp_idx + 1) % len(self._waypoints)
+                self._dwell_start = None
+                self._log_current_wp()
+                return   # publish next cycle
+        else:
+            self._dwell_start = None   # left the proximity zone; reset dwell
+
+        # ── Build and publish PoseStamped ───────────────────────────────────
+        msg = PoseStamped()
+        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'world'
+        msg.pose.position.x = float(tx)
+        msg.pose.position.y = float(ty)
+        msg.pose.position.z = float(tz)
+
+        # Convert yaw → quaternion (roll=0, pitch=0, yaw=tyaw)
+        half_yaw = tyaw * 0.5
+        msg.pose.orientation.w = math.cos(half_yaw)
+        msg.pose.orientation.x = 0.0
+        msg.pose.orientation.y = 0.0
+        msg.pose.orientation.z = math.sin(half_yaw)
+
+        self._pub.publish(msg)
+
+    # ── Logging helper ──────────────────────────────────────────────────────
+    def _log_current_wp(self):
+        idx = self._wp_idx
+        wp  = self._waypoints[idx]
+        self.get_logger().info(
+            f'Waypoint {idx + 1}/{len(self._waypoints)}  →  '
+            f'x={wp[0]:.2f}  y={wp[1]:.2f}  z={wp[2]:.2f}  '
+            f'yaw={math.degrees(wp[3]):.1f}°')
 
 
-# --- Entry point -----------------------------
+# ── Entry point ───────────────────────────────────────────────────────────────
+
 def main(args=None):
     rclpy.init(args=args)
-    node = QuadrotorPIDNode()
+    node = TrajectoryNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -193,8 +149,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-        plt.ioff()
-        plt.show()   # keep final plot open after Ctrl+C
 
 
 if __name__ == '__main__':

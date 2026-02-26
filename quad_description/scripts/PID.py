@@ -259,59 +259,6 @@ class QuadrotorPIDNode(Node):
         cmd.velocity = [clamp(w0), clamp(w1), clamp(w2), clamp(w3)]
         self.cmd_pub.publish(cmd)
 
-        # --- Record history ----------------------
-        t = now - self._t0
-        with self._plot_lock:
-            self.t_hist.append(t)
-            self.x_hist.append(self.pos_x);   self.tx_hist.append(self.TARGET_X)
-            self.y_hist.append(self.pos_y);   self.ty_hist.append(self.TARGET_Y)
-            self.z_hist.append(self.pos_z);   self.tz_hist.append(self.TARGET_Z)
-
-    # --- Live matplotlib plot ------------------
-    def _plot_loop(self):
-        plt.ion()
-        fig, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
-        fig.suptitle('Quadrotor PID — Position vs Target', fontsize=14, fontweight='bold')
-
-        axis_labels = ['X  (m)', 'Y  (m)', 'Z  (m)']
-        act_colors  = ['#2196F3', '#FF5722', '#4CAF50']
-        tgt_colors  = ['#90CAF9', '#FFAB91', '#A5D6A7']
-
-        lines_act, lines_tgt = [], []
-        for i, ax in enumerate(axes):
-            la, = ax.plot([], [], color=act_colors[i], lw=1.8, label='Actual')
-            lt, = ax.plot([], [], '--', color=tgt_colors[i], lw=1.5, label='Target')
-            lines_act.append(la)
-            lines_tgt.append(lt)
-            ax.set_ylabel(axis_labels[i], fontsize=10)
-            ax.legend(loc='upper right', fontsize=8)
-            ax.grid(True, alpha=0.3)
-
-        axes[-1].set_xlabel('Time  (s)', fontsize=10)
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-
-        while rclpy.ok():
-            try:
-                with self._plot_lock:
-                    t   = list(self.t_hist)
-                    act = [list(self.x_hist), list(self.y_hist), list(self.z_hist)]
-                    tgt = [list(self.tx_hist),list(self.ty_hist),list(self.tz_hist)]
-
-                if len(t) > 2:
-                    for i in range(3):
-                        lines_act[i].set_data(t, act[i])
-                        lines_tgt[i].set_data(t, tgt[i])
-                        axes[i].relim()
-                        axes[i].autoscale_view()
-
-                    fig.canvas.draw_idle()
-                    fig.canvas.flush_events()
-
-                plt.pause(0.2)   # refresh at ~5 Hz
-            except Exception:
-                pass
-
-
 # --- Entry point -----------------------------
 def main(args=None):
     rclpy.init(args=args)
