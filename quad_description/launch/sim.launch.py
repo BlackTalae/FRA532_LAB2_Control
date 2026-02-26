@@ -84,7 +84,8 @@ def generate_launch_description():
             '--ros-args',
             '-p',
             f'config_file:={bridge_params}',
-        ]
+        ],
+        parameters=[{'use_sim_time': True}],
     )
 
     # Start RViz
@@ -92,13 +93,15 @@ def generate_launch_description():
         package="rviz2",
         executable="rviz2",
         arguments=["-d", rviz_file_path],
-        output="screen"
+        output="screen",
+        parameters=[{'use_sim_time': True}],
     )
 
     lqr = Node(
         package="quad_description",
         executable="LQR.py",
-        output="screen"
+        output="screen",
+        parameters=[{'use_sim_time': True}],
     )
 
     # Create LaunchDescription
