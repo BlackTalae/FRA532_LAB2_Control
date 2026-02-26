@@ -21,14 +21,10 @@ class RPYControllerNode(Node):
     def __init__(self):
         super().__init__('rpy_controller_node')
         # Set Kp , Ki , Kd
-        # self.k_roll     = [220, 3.0, 6.0]
-        # self.k_pitch    = [220, 3.0, 6.0]
-        # self.k_yaw      = [0,0,0]
-        # self.k_thrust   = [0.8 , 0.0 , 10.0]
-        self.k_roll     = [220, 3.0, 6.0]
-        self.k_pitch    = [220, 3.0, 6.0]
+        self.k_roll     = [15, 0.2, 6.0]
+        self.k_pitch    = [15, 0.2, 6.0]
         self.k_yaw      = [0,0,0]
-        self.k_thrust   = [1500.0 , 0.0 , 0.1]
+        self.k_thrust   = [1500.0 , 0.2 , 0]
         # self.k_thrust   = [0.2 , 0.0002 , 0.0002]
         # self.k_thrust   = [0.0 , 0.0 , 0.0]
         # Init controller
@@ -38,7 +34,7 @@ class RPYControllerNode(Node):
         self.pitch_controller    = PID(kp=self.k_pitch[0] , ki=self.k_pitch[1] , kd=self.k_pitch[2]  , out_max=self.OMEGA_MAX_RPY, out_min=-self.OMEGA_MAX_RPY)
         self.yaw_controller      = PID(kp=self.k_yaw[0]   , ki=self.k_yaw[1]   , kd=self.k_yaw[2]    , out_max=self.OMEGA_MAX_RPY, out_min=-self.OMEGA_MAX_RPY)
         self.thrust_controller   = PID(kp=self.k_thrust[0], ki=self.k_thrust[1], kd=self.k_thrust[2] , out_max=self.OMEGA_MAX_THRUST, out_min=-self.OMEGA_MAX_THRUST)
-        # self.thrust_controller   = PID(kp=self.k_thrust[0], ki=self.k_thrust[1], kd=self.k_thrust[2] , out_max=self.OMEGA_MAX_THRUST, out_min=0.0)
+
         # Create Sub & Pub
         self.cmd_pub  = self.create_publisher(Actuators, '/motor_commands', 10)
         self.odom_sub = self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
@@ -89,16 +85,18 @@ class RPYControllerNode(Node):
         roll_err    = wrap_pi(self.ref_roll - self.roll)
         pitch_err   = wrap_pi(self.ref_pitch - self.pitch)
 
-        thrust_cmd  = self.thrust_controller.compute(error=alt_err, dt=self.dt , derivative_term=self.v_z,anti_windup=False)
+        thrust_cmd  = self.thrust_controller.compute(error=alt_err, dt=self.dt , derivative_term=self.v_z)
         roll_cmd    = self.roll_controller.compute(error=roll_err,dt=self.dt)
         pitch_cmd   = self.pitch_controller.compute(error=pitch_err,dt=self.dt)
         
-        hover_base = 656.0#*1.0125
+        hover_base = 1.5 * 9.81 # mg
         FR_vel, HL_vel, FL_vel, HR_vel = mma(thrust_cmd, -roll_cmd, -pitch_cmd, 0.0, hover_base)
+        kf = 8.54858e-06
+        FR_vel, HL_vel, FL_vel, HR_vel = math.sqrt(FR_vel), kf*HL_vel, kf*FL_vel, kf*HR_vel 
 
-        print("ALTITUTE ERROR" , alt_err)
+        # print("ALTITUTE ERROR" , alt_err)
         # print(thrust_cmd , roll_cmd , pitch_cmd)
-        # print(FL_vel , HL_vel , FR_vel , HR_vel )
+        print(FL_vel , HL_vel , FR_vel , HR_vel )
 
         self.pub_motor_cmd(FR_vel , HL_vel , FL_vel , HR_vel)
         # print(self.roll , self.pitch)

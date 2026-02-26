@@ -22,30 +22,35 @@ class PID():
         self._integral = 0.0
         self._prev_error = 0.0
 
-    def compute(self, error: float, dt: float) -> float:
+    def compute(self, error: float, dt: float, derivative_term=None,anti_windup=False) -> float:
 
         if dt <= 1e-6: # if below 1 microsecond
             return 0.0
 
-        self._integral += error * dt        
-        self._integral = max(-self.windup_limit, min(self.windup_limit, self._integral)) # clamp integral
+        if anti_windup == False:
+            self._integral += error * dt        
+        # self._integral = max(-self.windup_limit, min(self.windup_limit, self._integral)) # clamp integral
 
         derivative = (error - self._prev_error) / dt
         self._prev_error = error
+        if derivative_term is None:
+            u_unsat = self.kp * error + self.ki * self._integral + self.kd * derivative
+        else:
+            u_unsat = self.kp * error + self.ki * self._integral + self.kd * derivative_term
 
-        u_unsat = self.kp * error + self.ki * self._integral + self.kd * derivative
         u_sat = max(self.out_min, min(self.out_max, u_unsat))
 
         # Conditional integration anti-windup
         # - 1 : if not sat (normal case)
         # - 2 : (if sat MAX ,`less` output) and (error went other direction)
         # - 3 : (if sat MIN ,`more` output) and (error went other direction)  
-        if (u_unsat == u_sat) or \
-            (u_sat == self.out_max and error < 0) or \
-            (u_sat == self.out_min and error > 0):
-            
-            self._integral += error * dt
-            self._integral = max(-self.windup_limit, min(self.windup_limit, self._integral))
+        if anti_windup:
+            if (abs(u_unsat - u_sat) < 1e-5) or \
+                (u_sat == self.out_max and error < 0) or \
+                (u_sat == self.out_min and error > 0):
+                
+                self._integral += error * dt
+                self._integral = max(-self.windup_limit, min(self.windup_limit, self._integral))
 
         return u_sat
     
