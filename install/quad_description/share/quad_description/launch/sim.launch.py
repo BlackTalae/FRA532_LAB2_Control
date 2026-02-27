@@ -24,7 +24,7 @@ def generate_launch_description():
 
     spawn_x_val = "0.0"
     spawn_y_val = "0.0"
-    spawn_z_val = "1.0"
+    spawn_z_val = "3.0" #"0.055" # "10.0" #
 
     # Paths
     rviz_file_path = os.path.join(get_package_share_directory(package_name), "rviz", rviz_file_name)

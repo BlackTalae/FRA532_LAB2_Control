@@ -21,22 +21,24 @@ class RPYControllerNode(Node):
     def __init__(self):
         super().__init__('rpy_controller_node')
         # Set Kp , Ki , Kd
-        # self.k_roll     = [1.6, 0.0175, 0.10]
-        # self.k_pitch    = [1.6, 0.0175, 0.10]
-        # self.k_yaw      = [0,0,0]
-        #self.k_thrust   = [0.40 , 0.0175 , 0.07]
-
-        self.k_roll     = [2.0, 0.0085, 0.06]
-        self.k_pitch    = [2.0, 0.0085, 0.06]
-        self.k_yaw      = [0,0,0]
-        self.k_thrust   = [0.0175 , 0.0025 , 0.006] 
-
-        # WORK WELL!
         # self.k_roll     = [2.0, 0.0085, 0.06]
         # self.k_pitch    = [2.0, 0.0085, 0.06]
-        # self.k_thrust   = [0.09 , 0.0 , 0.05] 
-        # self.k_thrust   = [0.075 , 0.0015 , 0.05] 
-        # self.k_thrust   = [0.06 , 0.003 , 0.05]  # Slow respond
+        # self.k_yaw      = [0.015 ,0.01 , 0.0]
+        # self.k_thrust   = [2 , 0.08 , 0.002] 
+
+        # self.k_roll     = [2.5, 0.0015, 0.06]
+        # self.k_pitch    = [2.5, 0.0015, 0.06]
+        # self.k_yaw      = [0.015 ,0.005 , 0.0]
+        # self.k_thrust   = [2 , 0.08 , 0.002] 
+
+        self.k_roll     = [2.5, 0.0, 0.1]
+        self.k_pitch    = [0.1, 0.0, 0.1]
+        self.k_yaw      = [0.0 ,0.0 , 0.0]
+        self.k_thrust   = [2 , 0.08 , 0.002] 
+
+        self.k_x        = [0.2, 0.0003, 0.005]
+        self.k_y        = [2.0, 0.0085, 0.06]
+        self.k_z        = [2.0, 0.0085, 0.06]
 
         self.F_MAX_RPY    = 3.0 # PID u
         self.F_MAX_THRUST = 3.0 # PID u
@@ -48,62 +50,95 @@ class RPYControllerNode(Node):
         self.yaw_controller      = PID(kp=self.k_yaw[0]   , ki=self.k_yaw[1]   , kd=self.k_yaw[2]    , out_max=self.F_MAX_RPY, out_min=-self.F_MAX_RPY)
         self.thrust_controller   = PID(kp=self.k_thrust[0], ki=self.k_thrust[1], kd=self.k_thrust[2] , out_max=self.F_MAX_THRUST, out_min=-self.F_MAX_THRUST)
 
+        self.pos_x_controller    = PID(kp=self.k_x[0]     , ki=self.k_x[1]     , kd=self.k_x[2])
+        self.pos_y_controller    = PID(kp=self.k_y[0]     , ki=self.k_y[1]     , kd=self.k_y[2])
+        self.pos_z_controller    = PID(kp=self.k_z[0]     , ki=self.k_z[1]     , kd=self.k_z[2])
         # Create Sub & Pub
         self.cmd_pub  = self.create_publisher(Actuators, '/motor_commands', 10)
         self.odom_sub = self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
+        self.imu_sub = self.create_subscription(Imu, '/imu', self._imu_cb, 10)
         self._odom_received = False
         # Timer & Control
-        self.dt = 0.005
-        self.control_timer  = self.create_timer(self.dt, self._control_loop)
+        self.inner_dt = 0.005
+        self.outer_dt = 0.005
+        self.inner_control_timer  = self.create_timer(self.inner_dt, self._inner_loop)
+        self.outer_control_timer  = self.create_timer(self.outer_dt, self._outer_loop)
+
+        self.enable_outer_loop = False
 
         # Set refference
-        self.ref_roll       = 0
+        self.ref_roll       = 0.2
         self.ref_pitch      = 0
         self.ref_yaw        = 0
-        self.ref_altitute   = 1.0
-
-        self.v_z            = 0
+        self.ref_vel_z      = 0
+        self.ref_pos_x      = 0
+        self.ref_pos_y      = 0 
+        self.ref_pos_z      = 0
 
         # Control param
-        self.altitute       = 0
-        self.roll           = 0
-        self.pitch          = 0
-        self.yaw            = 0
+        self.vel_z          = 0
+        self.roll, self.pitch, self.yaw = 0, 0, 0
+        self.pos_x, self.pos_y, self.pos_z  = 0, 0, 0
 
         # ---- Debug publishers (multiple floats) ----
         self.err_pub = self.create_publisher(Float32MultiArray, '/pid/error', 10)
         self.cmd_pub_dbg = self.create_publisher(Float32MultiArray, '/pid/cmd', 10)
         self.hpy_pub = self.create_publisher(Float32MultiArray, '/pid/hpy', 10)
 
-
+    def _imu_cb(self,msg):
+        pass
     def _odom_cb(self, msg):
         
         p = msg.pose.pose.position
         v = msg.twist.twist.linear
         q = msg.pose.pose.orientation
 
-        _, _, self.altitute = p.x, p.y, p.z
-        _, _, self.v_z = v.x, v.y, v.z
+        self.pos_x, self.pos_y, self.pos_z = p.x, p.y, p.z
+        _, _, self.vel_z = v.x, v.y, v.z
 
         self.roll , self.pitch , self.yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
         self._odom_received = True
+        
+    def _outer_loop(self):
+        if self.enable_outer_loop == False:
+            return
+        if self._odom_received == False:
+            return
+        
+        x_err = self.ref_pos_x - self.pos_x
+        y_err = self.ref_pos_y - self.pos_y
+        z_err = self.ref_pos_z - self.pos_z
 
-    def _control_loop(self):
+        self.ref_pitch  = self.pos_x_controller.compute(error=x_err, dt=self.outer_dt)
 
+    def _inner_loop(self):
         if self._odom_received == False:
             return
 
 
-        alt_err     = self.ref_altitute - self.altitute
-        roll_err    = wrap_pi(self.ref_roll - self.roll)
-        pitch_err   = wrap_pi(self.ref_pitch - self.pitch)
+        vel_z_err     = self.ref_vel_z - self.vel_z
 
-        thrust_cmd  = self.thrust_controller.compute(error=alt_err, dt=self.dt,anti_windup=True)
-        roll_cmd    = self.roll_controller.compute(error=roll_err,dt=self.dt)
-        pitch_cmd   = self.pitch_controller.compute(error=pitch_err,dt=self.dt)
-        
+        # World-frame angle errors
+        roll_err_world  = wrap_pi(self.ref_roll  - self.roll)
+        pitch_err_world = wrap_pi(self.ref_pitch - self.pitch)
+
+        # Rotate to body frame using current yaw
+        # cos_yaw,sin_yaw = math.cos(self.yaw),math.sin(self.yaw)
+
+        # roll_err  =  cos_yaw * roll_err_world + sin_yaw * pitch_err_world
+        # pitch_err = -sin_yaw * roll_err_world + cos_yaw * pitch_err_world
+        roll_err  = wrap_pi(self.ref_roll  - self.roll)
+        pitch_err = wrap_pi(self.ref_pitch - self.pitch)
+
+
+        yaw_err     = wrap_pi(self.ref_yaw - self.yaw)
+        thrust_cmd  = self.thrust_controller.compute(error=vel_z_err, dt=self.inner_dt,anti_windup=True)
+        roll_cmd    = self.roll_controller.compute(error=roll_err,dt=self.inner_dt)
+        pitch_cmd   = self.pitch_controller.compute(error=pitch_err,dt=self.inner_dt)
+        yaw_cmd     = self.yaw_controller.compute(error=yaw_err,dt=self.inner_dt)
+
         hover_base = ((1.5 * 9.81)/4) + 0.046 #0.039 # 0.036 # mg
-        FR_thrust, HL_thrust, FL_thrust, HR_thrust = mma(thrust_cmd, roll_cmd, pitch_cmd, 0.0, hover_base)
+        FR_thrust, HL_thrust, FL_thrust, HR_thrust = mma(thrust_cmd, roll_cmd, pitch_cmd, yaw_cmd, hover_base)
         
         kf = 8.54858e-06
         FR_vel = thrust_to_omega(FR_thrust, kf, self.F_MAX_ROTOR)
@@ -114,7 +149,7 @@ class RPYControllerNode(Node):
 
         # print("ALTITUTE ERROR" , alt_err)
         # print(thrust_cmd , roll_cmd , pitch_cmd)
-        print(thrust_cmd , hover_base)
+        # print(thrust_cmd , hover_base)
         # print(FL_vel , HL_vel , FR_vel , HR_vel )
 
         self.pub_motor_cmd(FR_vel , HL_vel , FL_vel , HR_vel)
@@ -127,13 +162,13 @@ class RPYControllerNode(Node):
         # print(f"command : {self.ref_altitute,self.altitute}")
 
         self.pub_pid_debug(
-            alt_err,
+            vel_z_err,
             roll_err,
             pitch_err,
             thrust_cmd,
             roll_cmd,
             pitch_cmd,
-            self.altitute,
+            self.vel_z,
             self.roll,
             self.pitch
         )
