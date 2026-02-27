@@ -26,13 +26,13 @@ class RPYControllerNode(Node):
         # self.k_yaw      = [0.015 ,0.01 , 0.0]
         # self.k_thrust   = [2 , 0.08 , 0.002] 
 
-        # self.k_roll     = [2.5, 0.0015, 0.06]
-        # self.k_pitch    = [2.5, 0.0015, 0.06]
+        self.k_roll     = [2.5, 0.0015, 0.06]
+        self.k_pitch    = [2.5, 0.0015, 0.06]
         # self.k_yaw      = [0.015 ,0.005 , 0.0]
         # self.k_thrust   = [2 , 0.08 , 0.002] 
 
-        self.k_roll     = [0.00002, 0.0, 0.0]
-        self.k_pitch    = [0.00002, 0.0, 0.0]
+        # self.k_roll     = [0.00002, 0.0, 0.0]
+        # self.k_pitch    = [0.00002, 0.0, 0.0]
         self.k_yaw      = [0.0 ,0.0 , 0.0]
         self.k_thrust   = [2 , 0.08 , 0.002] 
 
