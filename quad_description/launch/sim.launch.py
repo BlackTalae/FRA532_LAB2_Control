@@ -36,6 +36,12 @@ def generate_launch_description():
         'empty.sdf'
         )    
 
+    # default_world = os.path.join(
+    #     get_package_share_directory(package_name),
+    #     'worlds',
+    #     'wind.sdf'
+    #     ) 
+
     world = LaunchConfiguration('world')
 
     world_arg = DeclareLaunchArgument(
@@ -128,8 +134,8 @@ def generate_launch_description():
     launch_description.add_action(rsp) 
     launch_description.add_action(spawn_entity)
     launch_description.add_action(bridge)
-    # launch_description.add_action(lqr)   # ← LQR controller
-    launch_description.add_action(mpc)     # ← MPC controller
+    launch_description.add_action(lqr)   # ← LQR controller
+    # launch_description.add_action(mpc)     # ← MPC controller
     launch_description.add_action(trajectory)  # ← Trajectory / goal sender
 
     return launch_description
