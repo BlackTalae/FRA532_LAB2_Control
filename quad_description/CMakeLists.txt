@@ -20,6 +20,7 @@ find_package(ament_cmake REQUIRED)
 
 # Install Python executables
 install(PROGRAMS
+  scripts/PID_ken.py
   scripts/PID.py
   scripts/LQR.py
   scripts/MPC.py

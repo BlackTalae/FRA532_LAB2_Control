@@ -324,8 +324,8 @@ def main(args=None):
     # ──── EASY SELECTION ──────────────────────────────────────────────────────
     # Choose your trajectory mode: 'HOVER', 'VERTICAL', 'CIRCLE', 'XZ_SQUARE', 'SINE'
     # ──────────────────────────────────────────────────────────────────────────
-    MODE = 'HELIX'
-    SPEED = 5.0      # m/s
+    MODE = 'SINE'
+    SPEED = 10.0      # m/s
     ROUND_TRIP = True # Forward and then back along the same path
     
     trajectories = {

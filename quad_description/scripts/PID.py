@@ -169,7 +169,8 @@ class QuadrotorPIDNode(Node):
             Odometry, '/odom', self._odom_cb, 10)
         self.cmd_pub  = self.create_publisher(
             Actuators, '/motor_commands', 10)
-
+        self.target_sub = self.create_subscription(
+            PoseStamped, '/target_pose', self._target_cb, 10)
         # Control loop at 100 Hz
         self.create_timer(0.01, self._control_loop)
 

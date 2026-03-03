@@ -64,6 +64,7 @@ import matplotlib
 matplotlib.use('TkAgg')   # change to 'Qt5Agg' if TkAgg not available
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from scipy.linalg import solve_continuous_are
 
 import rclpy
@@ -214,6 +215,8 @@ class QuadrotorLQRNode(Node):
 
         K = lqr(A, B, Q, R)
         self.lqr_ctrl = LQR(K)
+        df = pd.DataFrame(K, columns=['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'])
+        df.to_csv('my_data.csv', index=False)
         self.get_logger().info(f'LQR gain K computed {K.tolist()}')
 
         # ── Dynamic target (updated by /target_pose) ────────────────────────

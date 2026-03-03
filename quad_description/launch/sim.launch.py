@@ -103,6 +103,13 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}],
     )
 
+    pid = Node(
+        package="quad_description",
+        executable="PID_ken.py",
+        output="screen",
+        parameters=[{'use_sim_time': True}],
+    )
+
     lqr = Node(
         package="quad_description",
         executable="LQR.py",
@@ -134,6 +141,7 @@ def generate_launch_description():
     launch_description.add_action(rsp) 
     launch_description.add_action(spawn_entity)
     launch_description.add_action(bridge)
+    # launch_description.add_action(pid)   # ← PID controller
     launch_description.add_action(lqr)   # ← LQR controller
     # launch_description.add_action(mpc)     # ← MPC controller
     launch_description.add_action(trajectory)  # ← Trajectory / goal sender
