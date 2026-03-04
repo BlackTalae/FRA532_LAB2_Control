@@ -201,16 +201,16 @@ class QuadrotorLQRNode(Node):
         #   State: [x, y, z, φ, θ, ψ, ẋ, ẏ, ż, φ̇, θ̇, ψ̇]
         Q = np.diag([
             120.0,  120.0,  900.0,   # position  x, y, z     — penalise position error
-            10.0,   10.0,   500.0,    # attitude  φ, θ, ψ
+            10.0,   10.0,   1500.0,    # attitude  φ, θ, ψ
             10.0,   10.0,   50.0,    # velocity  ẋ, ẏ, ż
             1.0,   1.0,   10.0,    # ang-rate  φ̇, θ̇, ψ̇
         ])
         #   Input: [F_total, τ_roll, τ_pitch, τ_yaw]
         R = np.diag([
-            10.0,   # F  (large  → cheap to vary thrust)
+            1.0,   # F  (large  → cheap to vary thrust)
             1.0,    # τ_roll
             1.0,    # τ_pitch
-            0.1,    # τ_yaw
+            0.001,    # τ_yaw
         ])
 
         K = lqr(A, B, Q, R)
