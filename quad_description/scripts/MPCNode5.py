@@ -102,22 +102,35 @@ class MPCController(Node):
     DT = 0.05
     N  = 20
 
-    Q_DIAG = np.array([15., 18., 18.,
-                       15., 15.,  6.,
-                        5.,  5.,  5.,
-                        8.,  8.,  0.5])
-    QN_SCALE = 5.0
+    # Q_DIAG = np.array([18., 18., 18.,  # x ,y ,z
+    #                    18., 18.,  6.,  # roll , pitch , yaw
+    #                     5.,  5.,  5.,
+    #                     10.,  10.,  0.5])
 
-    R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
+
+    # ---------- Hover setup
+    # Q_DIAG = np.array([30., 30., 30.,  # x ,y ,z
+    #                    30., 30.,  15.,  # roll , pitch , yaw
+    #                     5.,  5.,  5.,
+    #                     15.,  15.,  8.0])
+    # QN_SCALE = 5.0
+    # R_DIAG = np.array([0.01, 0.5, 0.5, 1.5])
+
+    Q_DIAG = np.array([60., 60., 30.,  # x ,y ,z
+                       30., 30.,  5.,  # roll , pitch , yaw
+                        20.,  20.,  10.,
+                        25.,  25.,  8.0])
+    QN_SCALE = 5.0
+    R_DIAG = np.array([0.01, 0.5, 0.5, 1.5])
 
     U_MIN = np.array([0.0,   -8.0, -8.0, -3.0])
     U_MAX = np.array([4.0 * MASS * GRAVITY, 8.0, 8.0, 3.0])
 
     # ── Hover settings ────────────────────────────────────────────────────────
     HOVER_ALT         = 2.0    # m    target altitude
-    HOVER_STABLE_TIME = 3.0    # s    must be stable this long before accepting trajectory
-    HOVER_POS_TOL     = 0.10   # m    position error threshold for "stable"
-    HOVER_VEL_TOL     = 0.05   # m/s  velocity threshold for "stable"
+    HOVER_STABLE_TIME = 0.0 # 3.0    # s    must be stable this long before accepting trajectory
+    HOVER_POS_TOL     = 0.5 # 0.10   # m    position error threshold for "stable"
+    HOVER_VEL_TOL     = 0.25 # 0.05   # m/s  velocity threshold for "stable"
 
     # ── External trajectory timeout ───────────────────────────────────────────
     # If no /reference_path message arrives within this window, revert to HOVER.

@@ -34,6 +34,7 @@ def generate_launch_description():
         get_package_share_directory(package_name),
         'worlds',
         'empty.sdf'
+        # 'wind.sdf'
         )    
 
     world = LaunchConfiguration('world')
