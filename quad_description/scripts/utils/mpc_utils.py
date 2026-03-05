@@ -1,85 +1,36 @@
-from scipy.linalg import expm, solve_discrete_are
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Discrete-time LTI system helper
-# ═══════════════════════════════════════════════════════════════════════════════
 import numpy as np
+from scipy.signal import cont2discrete            # ← needed for c2d
 
-def c2d(A: np.ndarray, B: np.ndarray, dt: float):
+def build_xref_from_traj(traj, N, n):
     """
-    Zero-order-hold discretisation of a continuous LTI system.
-
-    Returns (Ad, Bd) such that  x_{k+1} = Ad x_k + Bd u_k.
-    Uses the matrix-exponential method via the Van Loan algorithm:
-        M = expm( [[-A, B B'] ; [0, A']] * dt )   (Scipy approximation)
-
-    For simplicity we use the 1st-order Euler + Cayley approximation:
-        Ad ≈ (I + A·dt/2)·(I - A·dt/2)⁻¹   (Tustin / bilinear)
-    For our drone (dt = 0.01 s) this gives negligible discretisation error.
-    """
-    from scipy.linalg import expm
-    n = A.shape[0]
-    M = np.zeros((n + B.shape[1], n + B.shape[1]))
-    # Build augmented matrix for ZOH
-    em_upper = np.hstack([A, B])
-    em_lower = np.zeros((B.shape[1], n + B.shape[1]))
-    em = np.block([[em_upper], [em_lower]])
-    Ms = expm(em * dt)
-    Ad = Ms[:n, :n]
-    Bd = Ms[:n, n:]
-    return Ad, Bd
-
-
-def dare_terminal_cost(Ad, Bd, Q, R):
-    """Solve the DARE to get the infinite-horizon terminal cost matrix P."""
-    P = solve_discrete_are(Ad, Bd, Q, R)
-    return P
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Utility: continuous → discrete (ZOH)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def c2d(A: np.ndarray, B: np.ndarray, dt: float):
-    """
-    Zero-order-hold discretisation via matrix exponential.
-
-    Returns (Ad, Bd) such that  x_{k+1} = Ad x_k + Bd u_k.
-    """
-    n, m = A.shape[0], B.shape[1]
-    em = np.zeros((n + m, n + m))
-    em[:n, :n] = A
-    em[:n, n:] = B
-    Ms = expm(em * dt)
-    return Ms[:n, :n], Ms[:n, n:]
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Utility: condensed prediction matrices
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def build_condensed(Ad: np.ndarray, Bd: np.ndarray, N: int):
-    """
-    Build Φ (free-response) and Θ (forced-response) matrices such that:
-
-        X = Φ · e0 + Θ · Z
-
-    where  X = [x_1', …, x_N']'  and  Z = [Δu_0', …, Δu_{N-1}']'.
+    traj : np.ndarray shape (n, T)   — state_dim × timesteps
+    N    : prediction horizon
+    n    : state dimension
 
     Returns
     -------
-    Phi   : ndarray, shape (N·n, n)
-    Theta : ndarray, shape (N·n, N·m)
+    xref : np.ndarray shape (n, N+1)
+        Columns 0…min(T,N+1)-1 come from traj.
+        If T < N+1 the last column is repeated to fill the remainder.
+        If T > N+1 the trajectory is truncated.
     """
-    n, m = Ad.shape[0], Bd.shape[1]
-    Phi   = np.zeros((N * n, n))
-    Theta = np.zeros((N * n, N * m))
+    traj = np.asarray(traj)
+    if traj.shape[0] != n:
+        raise ValueError(f"Expected traj.shape[0]=={n}, got {traj.shape[0]}")
 
-    Ak = np.eye(n)
-    for i in range(N):
-        Ak = Ad @ Ak
-        Phi[i * n:(i + 1) * n, :] = Ak
-        for j in range(i + 1):
-            Theta[i * n:(i + 1) * n, j * m:(j + 1) * m] = (
-                np.linalg.matrix_power(Ad, i - j) @ Bd
-            )
-    return Phi, Theta
+    T    = traj.shape[1]
+    xref = np.zeros((n, N + 1))
+    L    = min(T, N + 1)
+    xref[:, :L] = traj[:, :L]
+    if T < N + 1:
+        xref[:, L:] = traj[:, -1].reshape(n, 1)   # hold final
+    return xref
+
+# ── Continuous-to-discrete conversion ────────────────────────────────────
+def c2d(A: np.ndarray, B: np.ndarray, dt: float):
+    """Zero-order hold discretisation using scipy."""
+    # FIX: MPC expects discrete (Ad, Bd); build them here from continuous A, B
+    sys_d = cont2discrete((A, B, np.eye(A.shape[0]), np.zeros((A.shape[0], B.shape[1]))),
+                            dt, method='zoh')
+    Ad, Bd = sys_d[0], sys_d[1]
+    return Ad, Bd

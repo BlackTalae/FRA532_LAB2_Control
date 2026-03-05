@@ -21,23 +21,19 @@ class RPYControllerNode(Node):
     def __init__(self):
         super().__init__('rpy_controller_node')
         # Set Kp , Ki , Kd
+        # --- Work
         # self.k_roll     = [2.0, 0.0085, 0.06]
         # self.k_pitch    = [2.0, 0.0085, 0.06]
         # self.k_yaw      = [0.015 ,0.01 , 0.0]
         # self.k_thrust   = [2 , 0.08 , 0.002] 
 
-        self.k_roll     = [2.5, 0.0015, 0.06]
-        self.k_pitch    = [2.5, 0.0015, 0.06]
-        # self.k_yaw      = [0.015 ,0.005 , 0.0]
-        # self.k_thrust   = [2 , 0.08 , 0.002] 
-
-        # self.k_roll     = [0.00002, 0.0, 0.0]
-        # self.k_pitch    = [0.00002, 0.0, 0.0]
-        self.k_yaw      = [0.0 ,0.0 , 0.0]
+        self.k_roll     = [2.0, 0.08, 0.1]
+        self.k_pitch    = [2.0, 0.08, 0.1]
+        self.k_yaw      = [0.015 ,0.01 , 0.0]
         self.k_thrust   = [2 , 0.08 , 0.002] 
 
         self.k_x        = [0.2, 0.0003, 0.005]
-        self.k_y        = [2.0, 0.0085, 0.06]
+        self.k_y        = [0.2, 0.0003, 0.005]
         self.k_z        = [2.0, 0.0085, 0.06]
 
         self.F_MAX_RPY    = 3.0 # PID u
@@ -68,12 +64,12 @@ class RPYControllerNode(Node):
 
         # Set refference
         self.ref_roll       = 0
-        self.ref_pitch      = 1
+        self.ref_pitch      = 0
         self.ref_yaw        = 0
         self.ref_vel_z      = 0
         self.ref_pos_x      = 0
         self.ref_pos_y      = 0 
-        self.ref_pos_z      = 0
+        self.ref_pos_z      = 5.0
 
         # Control param
         self.vel_z          = 0
@@ -84,6 +80,7 @@ class RPYControllerNode(Node):
         self.err_pub = self.create_publisher(Float32MultiArray, '/pid/error', 10)
         self.cmd_pub_dbg = self.create_publisher(Float32MultiArray, '/pid/cmd', 10)
         self.hpy_pub = self.create_publisher(Float32MultiArray, '/pid/hpy', 10)
+        self.outer_loop_pub = self.create_publisher(Float32MultiArray, '/pid/hpy', 10)
 
     def _imu_cb(self,msg):
         pass
@@ -109,7 +106,13 @@ class RPYControllerNode(Node):
         y_err = self.ref_pos_y - self.pos_y
         z_err = self.ref_pos_z - self.pos_z
 
-        self.ref_pitch  = self.pos_x_controller.compute(error=x_err, dt=self.outer_dt)
+        # self.ref_pitch  = self.pos_x_controller.compute(error=x_err, dt=self.outer_dt)
+        
+        # p = Float32MultiArray()
+        # p.data = [float(alt_err),
+        #         float(roll_err),
+        #         float(pitch_err)]
+        # self.outer_loop_pub.publish(e)
 
     def _inner_loop(self):
         if self._odom_received == False:
@@ -138,7 +141,7 @@ class RPYControllerNode(Node):
         yaw_cmd     = self.yaw_controller.compute(error=yaw_err,dt=self.inner_dt)
 
         hover_base = ((1.5 * 9.81)/4) + 0.046 #0.039 # 0.036 # mg
-        FR_thrust, HL_thrust, FL_thrust, HR_thrust = mma(thrust_cmd, roll_cmd, -pitch_cmd, yaw_cmd, hover_base)
+        FR_thrust, HL_thrust, FL_thrust, HR_thrust = mma(thrust_cmd, roll_cmd, pitch_cmd, yaw_cmd, hover_base)
         
         kf = 8.54858e-06
         FR_vel = thrust_to_omega(FR_thrust, kf, self.F_MAX_ROTOR)

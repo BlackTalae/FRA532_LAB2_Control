@@ -70,6 +70,7 @@ import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from actuator_msgs.msg import Actuators
+from geometry_msgs.msg import PoseStamped
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ class LQR:
         Parameters
         ----------
         error : ndarray, shape (12,)
-            State error  x_ref − x_current  (positive = below target).
+            State error  x_ref - x_current  (positive = below target).
 
         Returns
         -------
@@ -154,11 +155,11 @@ class QuadrotorLQRNode(Node):
     # joint origins: (0.13, ±0.22) and (-0.13, ±0.20) → use 0.22 m
     L = 0.22   # m  (distance from CoM to rotor along body x/y axis)
 
-    # ── Target pose (setpoint) ─────────────────────────────────────────────
-    TARGET_X   = 0.0   # m
-    TARGET_Y   = 0.0   # m
-    TARGET_Z   = 1.0   # m
-    TARGET_YAW = 0.0   # rad
+    # ── Default target pose (overridden live by /target_pose topic) ───────────
+    DEFAULT_TARGET_X   = 0.0   # m
+    DEFAULT_TARGET_Y   = 0.0   # m
+    DEFAULT_TARGET_Z   = 1.0   # m
+    DEFAULT_TARGET_YAW = 0.0   # rad
 
     # ── Plot history ───────────────────────────────────────────────────────
     HISTORY_LEN = 600   # samples @ 100 Hz → 6 s window
@@ -185,11 +186,12 @@ class QuadrotorLQRNode(Node):
         kF, kM, L = self.K_F, self.K_M, self.L
         self.Gamma = np.array([
             [ kF,       kF,       kF,       kF      ],   # Total thrust
-            [-kF * L,   kF * L,   kF * L,  -kF * L  ],   # τ_roll  (body x)
-            [ kF * L,  -kF * L,   kF * L,  -kF * L  ],   # τ_pitch (body y)
-            [-kM,      -kM,        kM,       kM      ],   # τ_yaw   (body z)
+            [-kF * L,   kF * 0.2,   kF * L,  -kF * 0.2  ],   # τ_roll  (body x)
+            [-kF * L,   kF * 0.2,  -kF * L,   kF * 0.2  ],   # τ_pitch (body y)
+            [-kM,      -kM,       kM,       kM      ],   # τ_yaw   (body z)
         ])
         self.Gamma_inv = np.linalg.inv(self.Gamma)
+        # self.get_logger().info(f'Gamma_inv: {self.Gamma_inv.tolist()}')
 
         # ── Build linearised model A, B ─────────────────────────────────────
         A, B = self._build_linear_model()
@@ -197,22 +199,28 @@ class QuadrotorLQRNode(Node):
         # ── LQR weight matrices Q and R ─────────────────────────────────────
         #   State: [x, y, z, φ, θ, ψ, ẋ, ẏ, ż, φ̇, θ̇, ψ̇]
         Q = np.diag([
-            10.0,  10.0,  20.0,   # position  x, y, z     — penalise position error
-            5.0,   5.0,   2.0,    # attitude  φ, θ, ψ
-            4.0,   4.0,   8.0,    # velocity  ẋ, ẏ, ż
+            120.0,  10.0,  900.0,   # position  x, y, z     — penalise position error
+            10.0,   10.0,   100.0,    # attitude  φ, θ, ψ
+            10.0,   4.0,   50.0,    # velocity  ẋ, ẏ, ż
             1.0,   1.0,   1.0,    # ang-rate  φ̇, θ̇, ψ̇
         ])
         #   Input: [F_total, τ_roll, τ_pitch, τ_yaw]
         R = np.diag([
-            1e-3,   # F  (large  → cheap to vary thrust)
-            0.1,    # τ_roll
-            0.1,    # τ_pitch
-            0.5,    # τ_yaw
+            10.0,   # F  (large  → cheap to vary thrust)
+            1.0,    # τ_roll
+            1.0,    # τ_pitch
+            1.0,    # τ_yaw
         ])
 
         K = lqr(A, B, Q, R)
         self.lqr_ctrl = LQR(K)
-        self.get_logger().info(f'LQR gain K computed  (shape {K.shape})')
+        self.get_logger().info(f'LQR gain K computed {K.tolist()}')
+
+        # ── Dynamic target (updated by /target_pose) ────────────────────────
+        self.TARGET_X   = self.DEFAULT_TARGET_X
+        self.TARGET_Y   = self.DEFAULT_TARGET_Y
+        self.TARGET_Z   = self.DEFAULT_TARGET_Z
+        self.TARGET_YAW = self.DEFAULT_TARGET_YAW
 
         # ── State ────────────────────────────────────────────────────────────
         self.pos_x = 0.0;  self.pos_y = 0.0;  self.pos_z = 0.0
@@ -232,21 +240,19 @@ class QuadrotorLQRNode(Node):
         self.z_hist  = deque(maxlen=n);  self.tz_hist = deque(maxlen=n)
 
         # ── ROS interfaces ───────────────────────────────────────────────────
-        self.odom_sub = self.create_subscription(
+        self.odom_sub   = self.create_subscription(
             Odometry, '/odom', self._odom_cb, 10)
-        self.cmd_pub  = self.create_publisher(
+        self.target_sub = self.create_subscription(
+            PoseStamped, '/target_pose', self._target_cb, 10)
+        self.cmd_pub    = self.create_publisher(
             Actuators, '/motor_commands', 10)
 
         # Control loop at 100 Hz
         self.create_timer(0.01, self._control_loop)
 
-        # Live plot in a background thread
-        self._plot_lock = threading.Lock()
-        threading.Thread(target=self._plot_loop, daemon=True).start()
-
         self.get_logger().info(
-            f'LQR node ready. Target → x={self.TARGET_X}, '
-            f'y={self.TARGET_Y}, z={self.TARGET_Z} m')
+            f'LQR node ready. Listening on /target_pose. '
+            f'Default target → x={self.TARGET_X}, y={self.TARGET_Y}, z={self.TARGET_Z} m')
 
     # ── Linearised quadrotor model ──────────────────────────────────────────
     def _build_linear_model(self):
@@ -303,6 +309,19 @@ class QuadrotorLQRNode(Node):
 
         return A, B
 
+    # ── Target pose callback ────────────────────────────────────────────────
+    def _target_cb(self, msg: PoseStamped):
+        """Update the setpoint from the trajectory / goal publisher."""
+        self.TARGET_X = msg.pose.position.x
+        self.TARGET_Y = msg.pose.position.y
+        self.TARGET_Z = msg.pose.position.z
+
+        # Extract yaw from quaternion
+        q = msg.pose.orientation
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y ** 2 + q.z ** 2)
+        self.TARGET_YAW = math.atan2(siny, cosy)
+
     # ── Odometry callback ───────────────────────────────────────────────────
     def _odom_cb(self, msg: Odometry):
         p = msg.pose.pose.position
@@ -328,6 +347,9 @@ class QuadrotorLQRNode(Node):
         self.yaw = math.atan2(siny, cosy)
 
         self._odom_received = True
+
+        self.get_logger().info(
+            f'Odom: z={self.pos_z:.2f}')
 
     # ── Main control loop ───────────────────────────────────────────────────
     def _control_loop(self):
@@ -377,11 +399,16 @@ class QuadrotorLQRNode(Node):
         # ── Clamp total thrust ───────────────────────────────────────────────
         F_max = 4.0 * self.K_F * self.OMEGA_MAX ** 2
         F_total = float(np.clip(F_total, 0.0, F_max))
+        # self.get_logger().info(f'u_corr: {u_corr[0]:.2f} N')
+        # self.get_logger().info(f'F_total: {F_total:.2f} N')
+        # self.get_logger().info(f'F_max: {F_max:.2f} N')
 
         # ── Motor mixing: solve for ωi² ──────────────────────────────────────
         wrench = np.array([F_total, tau_roll, tau_pitch, tau_yaw])
+        # wrench = np.array([self.F_hover, 0, 0, 0])
         omega_sq = self.Gamma_inv @ wrench          # [w0², w1², w2², w3²]
         omega_sq = np.clip(omega_sq, 0.0, self.OMEGA_MAX ** 2)
+        # self.get_logger().info(f'omega_sq: {omega_sq.tolist()} rad²/s²')
 
         omega = np.sqrt(omega_sq)
 
@@ -389,59 +416,6 @@ class QuadrotorLQRNode(Node):
         cmd = Actuators()
         cmd.velocity = [float(w) for w in omega]
         self.cmd_pub.publish(cmd)
-
-        # ── Record for live plot ─────────────────────────────────────────────
-        t = now - self._t0
-        with self._plot_lock:
-            self.t_hist.append(t)
-            self.x_hist.append(self.pos_x);  self.tx_hist.append(self.TARGET_X)
-            self.y_hist.append(self.pos_y);  self.ty_hist.append(self.TARGET_Y)
-            self.z_hist.append(self.pos_z);  self.tz_hist.append(self.TARGET_Z)
-
-    # ── Live matplotlib plot ────────────────────────────────────────────────
-    def _plot_loop(self):
-        plt.ion()
-        fig, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
-        fig.suptitle('Quadrotor LQR — Position vs Target', fontsize=14, fontweight='bold')
-
-        axis_labels = ['X  (m)', 'Y  (m)', 'Z  (m)']
-        act_colors  = ['#2196F3', '#FF5722', '#4CAF50']
-        tgt_colors  = ['#90CAF9', '#FFAB91', '#A5D6A7']
-
-        lines_act, lines_tgt = [], []
-        for i, ax in enumerate(axes):
-            la, = ax.plot([], [], color=act_colors[i], lw=1.8, label='Actual')
-            lt, = ax.plot([], [], '--', color=tgt_colors[i], lw=1.5, label='Target')
-            lines_act.append(la)
-            lines_tgt.append(lt)
-            ax.set_ylabel(axis_labels[i], fontsize=10)
-            ax.legend(loc='upper right', fontsize=8)
-            ax.grid(True, alpha=0.3)
-
-        axes[-1].set_xlabel('Time  (s)', fontsize=10)
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-
-        while rclpy.ok():
-            try:
-                with self._plot_lock:
-                    t   = list(self.t_hist)
-                    act = [list(self.x_hist), list(self.y_hist), list(self.z_hist)]
-                    tgt = [list(self.tx_hist), list(self.ty_hist), list(self.tz_hist)]
-
-                if len(t) > 2:
-                    for i in range(3):
-                        lines_act[i].set_data(t, act[i])
-                        lines_tgt[i].set_data(t, tgt[i])
-                        axes[i].relim()
-                        axes[i].autoscale_view()
-
-                    fig.canvas.draw_idle()
-                    fig.canvas.flush_events()
-
-                plt.pause(0.2)   # refresh at ~5 Hz
-            except Exception:
-                pass
-
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
