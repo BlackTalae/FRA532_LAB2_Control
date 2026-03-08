@@ -319,4 +319,26 @@ $U^*$ is our optimal control input
 > Special Thanks, reference : https://www.youtube.com/watch?v=6GSHAoLMsXs&list=PLg6FTHy3zJjzJ8Ddui6ZwQpdMZeoqG1ei
 
 ## Model Predictive Control Concept
+MPC works by predicting future system behavior using a model, optimizing a sequence of control inputs over a finite horizon, and applying only the first input before repeating the process. Then update the model, using the state in current time step as the initial guess for the open loop prediction. The two key ideas involved are open-loop prediction and the distinction between prediction horizon and control horizon.
 
+<p align="center">
+  <img src="./images/mpc.png" width="75%"/>
+</p>
+
+**Prediction Horizon**
+- The prediction horizon ​$N_{p}$  efines the number of future time steps over which the system states are predicted using the model
+- The model simulates the future system behavior over ​$N_{p}$ steps assuming a sequence of future control inputs.
+$$
+x_{k+1}, x_{k+2} , x_{k+3} , \dots, x_{k+N_{p}}
+$$
+The optimizer minimizes a cost function defined over these predicted states.
+
+**Control Horizon**
+- The control horizon ​$N_{c}$ defines the number of independent control inputs optimized by the controller.
+$$
+N_{c} \le N_{p}
+$$
+- After ​$N_{c}$ , the control input is usually held constant for the remaining prediction horizon:
+$$
+u_{k+i} = u_{k+N_{c}-1}, i \ge N_{c}
+$$
