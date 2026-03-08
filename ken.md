@@ -174,8 +174,7 @@ $$
 
 Expand:
 
-$$
-J = x_0^T \mathcal{A}^T \bar{Q} \mathcal{A} x_0
+$$J = x_0^T \mathcal{A}^T \bar{Q} \mathcal{A} x_0
 + 2 x_0^T \mathcal{A}^T \bar{Q} \mathcal{B} U
 + U^T \mathcal{B}^T \bar{Q} \mathcal{B} U
 + U^T \bar{R} U
@@ -283,11 +282,7 @@ $$
 
 #### Partial derivative w.r.t \(U\)
 
-$$
-\frac{\partial J}{\partial U}
-=
-2HU + 2F
-$$
+$$\frac{\partial J}{\partial U}=2HU + 2F$$
 
 Set gradient to zero
 
@@ -314,7 +309,7 @@ U^* =
 \mathcal{B}^T\bar{Q}(\mathcal{A}x_0-X_{ref})
 $$
 
-$U^*$ is our optimal control input
+- $U^{*}$ is our optimal control input
 
 > Special Thanks, reference : https://www.youtube.com/watch?v=6GSHAoLMsXs&list=PLg6FTHy3zJjzJ8Ddui6ZwQpdMZeoqG1ei
 
