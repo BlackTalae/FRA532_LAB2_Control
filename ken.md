@@ -316,18 +316,18 @@ MPC works by predicting future system behavior using a model, optimizing a seque
 </p>
 
 **Prediction Horizon**
-- The prediction horizon ​$N_{p}$  efines the number of future time steps over which the system states are predicted using the model
-- The model simulates the future system behavior over ​$N_{p}$ steps assuming a sequence of future control inputs.
-$$
-x_{k+1}, x_{k+2} , x_{k+3} , \dots, x_{k+N_{p}}
-$$
+- The prediction horizon ​$N_p$  efines the number of future time steps over which the system states are predicted using the model
+- The model simulates the future system behavior over ​$N_p$ steps assuming a sequence of future control inputs.
+
+$$x_{k+1}, x_{k+2} , x_{k+3} , \dots, x_{k+N_{p}}$$
+
 The optimizer minimizes a cost function defined over these predicted states.
 
 **Control Horizon**
-- The control horizon ​$N_{c}$ defines the number of independent control inputs optimized by the controller.
+- The control horizon ​$N_c$ defines the number of independent control inputs optimized by the controller.
 
 $$N_{c} \le N_{p}$$
 
-- After $N_{c}$ , the control input is usually held constant for the remaining prediction horizon:
+- After $N_c$ , the control input is usually held constant for the remaining prediction horizon:
 
 $$u_{k+i} = u_{k+N_{c}-1}, i \ge N_{c}$$
