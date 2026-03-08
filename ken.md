@@ -174,10 +174,9 @@ $$
 
 Expand:
 
-$$J = x_0^T \mathcal{A}^T \bar{Q} \mathcal{A} x_0
-+ 2 x_0^T \mathcal{A}^T \bar{Q} \mathcal{B} U
-+ U^T \mathcal{B}^T \bar{Q} \mathcal{B} U
-+ U^T \bar{R} U$$
+$$
+J = x_0^T \mathcal{A}^T \bar{Q} \mathcal{A} x_0 + 2 x_0^T \mathcal{A}^T \bar{Q} \mathcal{B} U + U^T \mathcal{B}^T \bar{Q} \mathcal{B} U + U^T \bar{R}U
+$$
 
 Group the terms in $U$:
 
@@ -302,10 +301,7 @@ $$
 Substitute back
 
 $$
-U^* =
--
-(\mathcal{B}^T\bar{Q}\mathcal{B}+\bar{R})^{-1}
-\mathcal{B}^T\bar{Q}(\mathcal{A}x_0-X_{ref})
+U^* = - (\mathcal{B}^T\bar{Q}\mathcal{B}+\bar{R})^{-1} \mathcal{B}^T\bar{Q}(\mathcal{A}x_0-X_{ref})
 $$
 
 - $U^{*}$ is our optimal control input
