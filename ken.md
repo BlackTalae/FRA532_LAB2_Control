@@ -325,10 +325,9 @@ The optimizer minimizes a cost function defined over these predicted states.
 
 **Control Horizon**
 - The control horizon ​$N_{c}$ defines the number of independent control inputs optimized by the controller.
-$$
-N_{c} \le N_{p}
-$$
-- After ​$N_{c}$ , the control input is usually held constant for the remaining prediction horizon:
-$$
-u_{k+i} = u_{k+N_{c}-1}, i \ge N_{c}
-$$
+
+$$N_{c} \le N_{p}$$
+
+- After $N_{c}$ , the control input is usually held constant for the remaining prediction horizon:
+
+$$u_{k+i} = u_{k+N_{c}-1}, i \ge N_{c}$$
