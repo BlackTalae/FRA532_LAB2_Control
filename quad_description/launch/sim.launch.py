@@ -12,6 +12,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.event_handlers import OnProcessExit
 from launch_ros.substitutions import FindPackageShare
+from launch.actions import TimerAction
 
 from launch_ros.actions import Node
 import xacro
@@ -34,13 +35,8 @@ def generate_launch_description():
         get_package_share_directory(package_name),
         'worlds',
         'empty.sdf'
+        # 'wind.sdf'
         )    
-
-    # default_world = os.path.join(
-    #     get_package_share_directory(package_name),
-    #     'worlds',
-    #     'wind.sdf'
-    #     ) 
 
     world = LaunchConfiguration('world')
 
@@ -124,12 +120,24 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}],
     )
 
-    trajectory = Node(
-        package="quad_description",
-        executable="send_trajectory.py",
-        output="screen",
-        parameters=[{'use_sim_time': True}],
+    trajectory = TimerAction(
+        period=5.0,
+        actions=[
+            Node(
+                package="quad_description",
+                executable="send_trajectory_2.py",
+                output="screen",
+                parameters=[{'use_sim_time': True}],
+            )
+        ]
     )
+
+    # trajectory = Node(
+    #     package="quad_description",
+    #     executable="send_trajectory.py",
+    #     output="screen",
+    #     parameters=[{'use_sim_time': True}],
+    # )
 
     # Create LaunchDescription
     launch_description = LaunchDescription()

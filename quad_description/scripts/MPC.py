@@ -1,578 +1,552 @@
 #!/usr/bin/env python3
 """
-Quadrotor Constrained MPC Hover Controller
-===========================================
-Controls a quadrotor to hold a fixed position (x, y, z) using Model
-Predictive Control (MPC) with a finite receding horizon and hard constraints.
+mpc_controller.py
+=================
+ROS 2 MPC node for quadrotor 3-D trajectory tracking in Ignition Gazebo.
 
-Subscribes to: /odom  (nav_msgs/msg/Odometry)
-Publishes to:  /motor_commands  (actuator_msgs/msg/Actuators)
+State   x = [x, y, z, phi, theta, psi, xdot, ydot, zdot, phidot, thetadot, psidot]  n=12
+Control u = [F_total, tau_roll, tau_pitch, tau_yaw]                                   p=4
 
-Physical parameters (from robot_params.xacro):
-  mass        = 1.5 kg
-  k_F         = 8.54858e-06  [N / (rad/s)^2]
-  k_M         = 0.06         [N·m / (rad/s)^2]
-  Ixx         = 0.0347563    [kg·m²]
-  Iyy         = 0.07         [kg·m²]
-  Izz         = 0.0977       [kg·m²]
-  omega_max   = 1500         rad/s
-  arm_length  = ~0.22 m  (from joint origins in URDF)
+External trajectory feed
+------------------------
+Subscribes to /reference_path (nav_msgs/Path) published by trajectory_generator.py.
+Each pose in the path = one future reference point for the MPC horizon.
 
-Linearisation point: hovering at rest (x,y,z) = target, roll=pitch=yaw=0,
-all velocities = 0.
+Phase logic
+-----------
+  IDLE       : waiting for first odometry
+  HOVER      : climb to HOVER_ALT and hold indefinitely
+               → transitions to TRAJECTORY only when a fresh /reference_path arrives
+               → never times out into a trajectory on its own
+  TRAJECTORY : tracking the external /reference_path
+               → reverts to HOVER if the path goes silent > EXTERNAL_TRAJ_TIMEOUT s
+               → reverts to HOVER if the path node is killed
 
-State vector  x  (12×1):
-  [x, y, z, φ(roll), θ(pitch), ψ(yaw),
-   ẋ, ẏ, ż, φ̇, θ̇, ψ̇]
+"No trajectory? Just hover." — the drone will stay at HOVER_ALT forever until
+trajectory_generator.py publishes a path, then track it, then hover again if lost.
 
-Input vector  u  (4×1):
-  [ΔF, Δτ_roll, Δτ_pitch, Δτ_yaw]   (deviation from hover trim)
-  Equilibrium input u_eq = 0.
+Solver
+------
+Hessian H is normalised by trace(H)/(p*N) to fix L-BFGS-B ill-conditioning.
 
-Constrained MPC QP (dense / condensed form):
-  ─────────────────────────────────────────────────────────────────
-  min   ½ U' H U  +  q' U
-  s.t.
-    (1) Input box:         u_min  ≤  u_k  ≤  u_max     ∀ k ∈ [0, N-1]
-    (2) Attitude limits:  |φ_k|, |θ_k|  ≤  φ_max       ∀ k ∈ [1, N]
-    (3) Altitude floor:   z_k  ≥  z_floor               ∀ k ∈ [1, N]
-  ─────────────────────────────────────────────────────────────────
-  where x_{k+1} = Ad x_k + Bd u_k,  x_0 = current state error,
-        H = Φ'Q̄Φ + R̄,  q = Φ'Q̄Ψ x_0,
-        Φ, Ψ are condensed prediction matrices.
-
-  Solved with scipy.optimize.minimize (SLSQP) — no extra dependencies.
-
-Terminal cost P: solution of Discrete Algebraic Riccati Equation (DARE).
-
-Motor layout (top view, X-config):
-        front (+x)
-          2   0
-      left     right
-          1   3
-        rear (-x)
-
-  Motor 0: front-right  CCW    Motor 2: front-left   CW
-  Motor 1: rear-left    CCW    Motor 3: rear-right   CW
-
-Motor mixing:  wrench = Γ · [w0², w1², w2², w3²]
-  → solved as  [wi²] = Γ⁻¹ · [F, τ_r, τ_p, τ_y]
-  → wi = sqrt(wi²), clamped to [0, omega_max].
+Variable naming follows the README math notation:
+  calA        ←→  𝒜   (stacked state prediction matrix)
+  calB        ←→  ℬ   (stacked control prediction matrix)
+  calBT_Qbar  ←→  ℬᵀQ̄
+  F           ←→  F   (linear cost term in  J = UᵀHU + 2UᵀF + c)
 """
 
 import math
-import threading
-from collections import deque
-
-import matplotlib
-matplotlib.use('TkAgg')   # change to 'Qt5Agg' if TkAgg is unavailable
-import matplotlib.pyplot as plt
 import numpy as np
-from scipy.linalg import expm, solve_discrete_are
-from scipy.optimize import minimize, Bounds, LinearConstraint
+from scipy.linalg import expm
+from scipy.optimize import minimize
+from enum import Enum, auto
 
 import rclpy
 from rclpy.node import Node
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from actuator_msgs.msg import Actuators
-from geometry_msgs.msg import PoseStamped
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Helper: discrete-time ZOH model
-# ──────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
-def c2d_zoh(A: np.ndarray, B: np.ndarray, dt: float):
-    """Zero-Order Hold discretisation using matrix exponential."""
-    n, m = A.shape[0], B.shape[1]
-    M = np.zeros((n + m, n + m))
-    M[:n, :n] = A
-    M[:n, n:] = B
-    eM = expm(M * dt)
-    return eM[:n, :n], eM[:n, n:]
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Helper: terminal cost (DARE)
-# ──────────────────────────────────────────────────────────────────────────────
-
-def dare_terminal(Ad, Bd, Q, R):
-    """Solve DARE for the infinite-horizon LQR terminal cost matrix P."""
-    return solve_discrete_are(Ad, Bd, Q, R)
+def quat2rpy(qx, qy, qz, qw):
+    sr = 2.0 * (qw * qx + qy * qz)
+    cr = 1.0 - 2.0 * (qx * qx + qy * qy)
+    roll = math.atan2(sr, cr)
+    sp = 2.0 * (qw * qy - qz * qx)
+    pitch = math.asin(max(-1.0, min(1.0, sp)))
+    sy = 2.0 * (qw * qz + qx * qy)
+    cy = 1.0 - 2.0 * (qy * qy + qz * qz)
+    yaw = math.atan2(sy, cy)
+    return roll, pitch, yaw
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# MPC controller (constrained, dense / condensed QP)
-# ──────────────────────────────────────────────────────────────────────────────
-
-class MPC:
-    """
-    Constrained finite-horizon MPC using a condensed QP.
-
-    Decision variable:  U = [u_0; u_1; …; u_{N-1}]  shape (m·N,)
-
-    Cost:
-        J(U) = ½ U' H U  +  q(x0)' U  +  const
-        H    = Φ' Q̄ Φ + R̄        (pre-computed, positive-definite)
-        q(x0)= Φ' Q̄ Ψ x0         (updated every step)
-
-    Constraints (all expressed as linear in U):
-        ① Input box:      lb_u ≤ U ≤ ub_u         → scipy Bounds
-        ② Attitude limits |φ_k|, |θ_k| ≤ φ_max   → LinearConstraint
-        ③ Altitude floor  z_k ≥ z_floor            → LinearConstraint
-
-    Only u_0 (first action) is applied (receding-horizon principle).
-
-    Parameters
-    ----------
-    Ad, Bd      : discrete-time state-space matrices
-    Q, R, P     : stage / terminal cost matrices
-    N           : prediction horizon (steps)
-    u_min/max   : input box bounds (shape m, applied to every step)
-    phi_max     : max absolute roll and pitch [rad]  (attitude constraint)
-    z_floor_err : lower bound on z-error (= z_floor − z_target);
-                  set to -inf to disable altitude constraint
-    x0_ref      : reference state (usually zeros); constraints use it to
-                  compute the actual state from the error signal
-    target_z    : target altitude for converting error → absolute altitude
-    """
-
-    def __init__(self,
-                 Ad: np.ndarray, Bd: np.ndarray,
-                 Q: np.ndarray, R: np.ndarray, P: np.ndarray,
-                 N: int,
-                 u_min: np.ndarray, u_max: np.ndarray,
-                 phi_max: float = 0.5,    # rad  (~28°)
-                 theta_max: float = 0.5,  # rad  (~28°)
-                 z_floor: float = 0.1):   # absolute altitude floor [m]
-        self.Ad, self.Bd = Ad, Bd
-        self.Q, self.R, self.P = Q, R, P
-        self.N = N
-        self.u_min, self.u_max = u_min, u_max
-        self.phi_max   = phi_max
-        self.theta_max = theta_max
-        self.z_floor   = z_floor
-
-        n, m = Ad.shape[0], Bd.shape[1]
-        self.n, self.m = n, m
-
-        # ── Pre-compute condensed prediction matrices ─────────────────────────
-        self.Psi, self.Phi = self._build_prediction_matrices(Ad, Bd, N)
-
-        # ── Pre-compute cost matrices ─────────────────────────────────────────
-        self._H, self._Q_bar = self._build_cost(self.Phi, Q, R, P, N, n, m)
-        # Hessian is constant — pre-factorise for warm gradient computation
-        self._PhiT_Qbar = self.Phi.T @ self._Q_bar   # (m*N) × (n*(N+1))
-        self._PsiT_Qbar = self.Psi.T @ self._Q_bar   # n     × (n*(N+1))
-
-        # ── Scipy Bounds (input box, repeated N times) ────────────────────────
-        lb_u = np.tile(u_min, N)
-        ub_u = np.tile(u_max, N)
-        self._bounds = Bounds(lb=lb_u, ub=ub_u)
-
-        # ── Pre-compute attitude and altitude constraint matrices ──────────────
-        # State prediction: X = Psi x0 + Phi U   (shape n*(N+1))
-        # For step k (k=1..N): x_k = Psi[k*n:(k+1)*n] x0 + Phi[k*n:(k+1)*n] U
-        #
-        # Attitude: φ (index 3), θ (index 4)  in x_k
-        # Altitude: z (index 2)               in x_k
-        #
-        # Constraint on φ error: |φ_ref - φ_k| ≤ φ_max → expressed on x_k:
-        #   -φ_max ≤ x_k[3] ≤ φ_max   (error = x_ref - x = target - current)
-        # But the error vector already is e_k = x_ref - x_k, so e_k[3] = -φ_k
-        # when x_ref[3]=0 → φ_k = -e_k[3]. We constrain the error e_k[3] = -φ_k.
-        # Actually simpler: just constrain U so that the predicted error in
-        # roll/pitch stays bounded, and compute the absolute state separately.
-        # We store Phi_att and Phi_z so we can rebuild the constraint with the
-        # current x0 every solve step.
-
-        # Row selectors for each predicted step (k=1..N)
-        self._C_roll    = self._extract_state_rows(n, N, 3)   # roll error rows
-        self._C_pitch   = self._extract_state_rows(n, N, 4)   # pitch error rows
-        self._C_z       = self._extract_state_rows(n, N, 2)   # z error rows
-
-        self._prev_U = np.zeros(m * N)   # warm-start cache
-
-    @staticmethod
-    def _extract_state_rows(n, N, state_idx):
-        """
-        Return the rows of the (N×n*(N+1)) matrix that pick out state_idx
-        for prediction steps k=1..N.
-        """
-        rows = np.zeros((N, n * (N + 1)))
-        for k in range(1, N + 1):
-            rows[k - 1, k * n + state_idx] = 1.0
-        return rows   # shape (N, n*(N+1))
-
-    @staticmethod
-    def _build_prediction_matrices(Ad, Bd, N):
-        """Build Ψ (n*(N+1)×n) and Φ (n*(N+1)×m*N)."""
-        n, m = Ad.shape[0], Bd.shape[1]
-        Psi = np.zeros((n * (N + 1), n))
-        Phi = np.zeros((n * (N + 1), m * N))
-        Ak  = np.eye(n)
-        for k in range(N + 1):
-            Psi[k * n:(k + 1) * n, :] = Ak
-            for j in range(k):
-                Phi[k * n:(k + 1) * n, j * m:(j + 1) * m] = (
-                    np.linalg.matrix_power(Ad, k - 1 - j) @ Bd
-                )
-            Ak = Ak @ Ad
-        return Psi, Phi
-
-    @staticmethod
-    def _build_cost(Phi, Q, R, P, N, n, m):
-        """Build Hessian H = Φ'Q̄Φ + R̄ and Q̄."""
-        Q_bar = np.zeros((n * (N + 1), n * (N + 1)))
-        for k in range(N):
-            Q_bar[k * n:(k + 1) * n, k * n:(k + 1) * n] = Q
-        Q_bar[N * n:(N + 1) * n, N * n:(N + 1) * n] = P
-        R_bar = np.kron(np.eye(N), R)
-        H = Phi.T @ Q_bar @ Phi + R_bar
-        return H, Q_bar
-
-    def compute(self, x0: np.ndarray,
-                current_z: float,
-                current_roll: float,
-                current_pitch: float) -> np.ndarray:
-        """
-        Solve the constrained MPC QP for current state error x0 and return
-        the first optimal control action (deviation from hover trim).
-
-        Parameters
-        ----------
-        x0           : state *error* x_ref - x_current  (shape n)
-        current_z    : current absolute altitude [m]  (for altitude constraint)
-        current_roll : current roll angle  [rad]      (for attitude constraint)
-        current_pitch: current pitch angle [rad]      (for attitude constraint)
-
-        Returns
-        -------
-        u0 : first optimal control deviation  [ΔF, Δτ_r, Δτ_p, Δτ_y]
-        """
-        n, m, N = self.n, self.m, self.N
-
-        # ── Linear cost gradient:  q = Φ'Q̄Ψ x0 ──────────────────────────────
-        q = self._PhiT_Qbar @ self.Psi @ x0   # (m*N,)
-
-        # ── Attitude constraints (linear in U) ────────────────────────────────
-        # Predicted roll error at step k: C_roll[k] @ (Psi x0 + Phi U) in [−φ,φ]
-        # → C_roll @ Phi  U  ≤  φ_max  − C_roll @ Psi x0
-        # → -C_roll @ Phi U  ≤  φ_max  + C_roll @ Psi x0
-        Psi_x0 = self.Psi @ x0   # (n*(N+1),)
-
-        A_roll  = self._C_roll  @ self.Phi   # (N, m*N)
-        A_pitch = self._C_pitch @ self.Phi
-        A_z     = self._C_z     @ self.Phi
-
-        b_roll_Psi  = self._C_roll  @ Psi_x0   # (N,)
-        b_pitch_Psi = self._C_pitch @ Psi_x0
-        b_z_Psi     = self._C_z     @ Psi_x0
-
-        # Roll:  -φ_max ≤ e_roll_k ≤ φ_max
-        #   lower: -φ_max - b_Psi ≤ A_roll U
-        #   upper:  φ_max - b_Psi ≥ A_roll U
-        lb_roll = -self.phi_max   * np.ones(N) - b_roll_Psi
-        ub_roll =  self.phi_max   * np.ones(N) - b_roll_Psi
-
-        lb_pitch = -self.theta_max * np.ones(N) - b_pitch_Psi
-        ub_pitch =  self.theta_max * np.ones(N) - b_pitch_Psi
-
-        # Altitude floor: absolute z = z_target - e_z  ≥ z_floor
-        #    z_target - (e_z_Psi + A_z U) ≥ z_floor
-        #    -A_z U ≤ z_target - z_floor - e_z_Psi
-        # error e_z = z_ref - z_current = x0[2] (entry 2 of state error)
-        # We want the *absolute* predicted altitude, which is:
-        #   z_k = z_target - e_z_k   (since e_z = z_ref - z)
-        # z_k = z_target - (b_z_Psi[k] + A_z[k] U)  ≥ z_floor
-        #   A_z U ≤ z_target - z_floor - b_z_Psi
-        # z_target is fixed (TARGET_Z), so we store it via the sign of x0[2]
-        z_target = current_z + x0[2]   # reconstruct from error
-        ub_z_abs = (z_target - self.z_floor) * np.ones(N) - b_z_Psi
-        # lower bound: no upper altitude limit (−∞)
-        lb_z_abs = -np.inf * np.ones(N)
-
-        # Stack attitude + altitude constraints
-        A_ineq = np.vstack([A_roll, A_pitch, A_z])
-        lb_ineq = np.concatenate([lb_roll, lb_pitch, lb_z_abs])
-        ub_ineq = np.concatenate([ub_roll, ub_pitch, ub_z_abs])
-
-        lin_con = LinearConstraint(A_ineq, lb_ineq, ub_ineq)
-
-        # ── Cost functions for SLSQP ──────────────────────────────────────────
-        H = self._H
-
-        def cost(U):
-            return 0.5 * U @ H @ U + q @ U
-
-        def cost_grad(U):
-            return H @ U + q
-
-        # ── Solve ─────────────────────────────────────────────────────────────
-        res = minimize(
-            cost,
-            self._prev_U,          # warm start
-            jac=cost_grad,
-            method='SLSQP',
-            bounds=self._bounds,
-            constraints=lin_con,
-            options={'ftol': 1e-6, 'maxiter': 100, 'disp': False},
-        )
-
-        U_opt = res.x if res.success else self._prev_U
-        self._prev_U = U_opt.copy()
-
-        return U_opt[:m]   # first action
+def quat2yaw(qz, qw):
+    return 2.0 * math.atan2(qz, qw)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ROS 2 Node
-# ──────────────────────────────────────────────────────────────────────────────
+def wrap_angle(a):
+    return (a + math.pi) % (2.0 * math.pi) - math.pi
 
-class QuadrotorMPCNode(Node):
 
-    # ── Physical constants ─────────────────────────────────────────────────
-    MASS       = 1.5            # kg
-    GRAVITY    = 9.81           # m/s²
-    K_F        = 8.54858e-06    # N / (rad/s)²
-    K_M        = 0.06           # N·m / (rad/s)²
-    OMEGA_MAX  = 1500.0         # rad/s
+# ─────────────────────────────────────────────────────────────────────────────
+# Flight phase
+# ─────────────────────────────────────────────────────────────────────────────
 
-    # Moments of inertia (from URDF)
-    IXX = 0.0347563   # kg·m²
-    IYY = 0.07        # kg·m²
-    IZZ = 0.0977      # kg·m²
+class Phase(Enum):
+    IDLE       = auto()
+    HOVER      = auto()
+    TRAJECTORY = auto()
 
-    # Arm length
-    L = 0.22   # m
 
-    # ── Default target pose (overridden live by /target_pose topic) ───────────
-    DEFAULT_TARGET_X   = 0.0   # m
-    DEFAULT_TARGET_Y   = 0.0   # m
-    DEFAULT_TARGET_Z   = 1.0   # m
-    DEFAULT_TARGET_YAW = 0.0   # rad
+# ─────────────────────────────────────────────────────────────────────────────
+# MPC Controller Node
+# ─────────────────────────────────────────────────────────────────────────────
 
-    # ── MPC settings ────────────────────────────────────────────────────────
-    MPC_N  = 15    # prediction / control horizon
-    MPC_DT = 0.01  # sample time [s]
+class MPCController(Node):
 
-    # ── Constraint parameters ────────────────────────────────────────────────
-    PHI_MAX   = 0.4    # max |roll|  [rad]  (~23°)
-    THETA_MAX = 0.4    # max |pitch| [rad]  (~23°)
-    Z_FLOOR   = 0.05   # absolute altitude floor [m]
+    # ── Physical parameters ───────────────────────────────────────────────────
+    # MASS      = 1.5
+    GRAVITY   = 9.81
+    IXX       = 0.0347563
+    IYY       = 0.07
+    IZZ       = 0.0977
 
-    # ── Plot history ───────────────────────────────────────────────────────
-    HISTORY_LEN = 600
+    MASS      = 1.525
+    # GRAVITY   = 9.81
+    # IXX = 0.0356547   
+    # IYY = 0.0705152       
+    # IZZ = 0.0990924 
+
+    K_F       = 8.54858e-06
+    K_M       = 0.06
+    OMEGA_MAX = 1500.0
+
+    ROTOR_POS = np.array([[ 0.13, -0.22],
+                           [-0.13,  0.20],
+                           [ 0.13,  0.22],
+                           [-0.13, -0.20]])
+    ROTOR_DIR = np.array([-1.0, -1.0, +1.0, +1.0])
+
+    # ── MPC hyper-parameters ──────────────────────────────────────────────────
+    DT = 0.05
+    N  = 20
+
+    # Q_DIAG = np.array([18., 18., 18.,  # x ,y ,z
+    #                    18., 18.,  6.,  # roll , pitch , yaw
+    #                     5.,  5.,  5.,
+    #                     10.,  10.,  0.5])
+
+
+    # ---------- Hover setup
+    # Q_DIAG = np.array([30., 30., 30.,  # x ,y ,z
+    #                    30., 30.,  15.,  # roll , pitch , yaw
+    #                     5.,  5.,  5.,
+    #                     15.,  15.,  8.0])
+    # QN_SCALE = 5.0
+    # R_DIAG = np.array([0.01, 0.5, 0.5, 1.5])
+
+    Q_DIAG = np.array([60., 60., 30.,  # x ,y ,z
+                       30., 30.,  5.,  # roll , pitch , yaw
+                        20.,  20.,  10.,
+                        25.,  25.,  8.0])
+    QN_SCALE = 5.0
+    R_DIAG = np.array([0.01, 0.5, 0.5, 1.5])
+
+    U_MIN = np.array([0.0,   -8.0, -8.0, -3.0])
+    U_MAX = np.array([4.0 * MASS * GRAVITY, 8.0, 8.0, 3.0])
+
+    # ── Hover settings ────────────────────────────────────────────────────────
+    HOVER_ALT         = 2.0    # m    target altitude
+    HOVER_STABLE_TIME = 0.0 # 3.0    # s    must be stable this long before accepting trajectory
+    HOVER_POS_TOL     = 0.5 # 0.10   # m    position error threshold for "stable"
+    HOVER_VEL_TOL     = 0.25 # 0.05   # m/s  velocity threshold for "stable"
+
+    # ── External trajectory timeout ───────────────────────────────────────────
+    # If no /reference_path message arrives within this window, revert to HOVER.
+    EXTERNAL_TRAJ_TIMEOUT = 0.5   # s
 
     def __init__(self):
-        super().__init__('quadrotor_mpc_node')
+        super().__init__('quad_mpc_controller')
+        self.get_logger().info('Initialising quadrotor MPC controller...')
 
-        # ── Hover trim ──────────────────────────────────────────────────────
-        self.F_hover     = self.MASS * self.GRAVITY
-        self.omega_hover = math.sqrt(self.F_hover / (4.0 * self.K_F))
-        self.get_logger().info(
-            f'Hover ω: {self.omega_hover:.1f} rad/s  F_hover: {self.F_hover:.2f} N')
+        m, g = self.MASS, self.GRAVITY
+        self.u_hover = np.array([m * g, 0.0, 0.0, 0.0])
 
-        # ── Motor allocation matrix Γ (4×4) ────────────────────────────────
-        kF, kM, L = self.K_F, self.K_M, self.L
-        self.Gamma = np.array([
-            [ kF,         kF,         kF,        kF       ],
-            [-kF * L,     kF * 0.2,   kF * L,   -kF * 0.2],
-            [-kF * L,     kF * 0.2,  -kF * L,    kF * 0.2],
-            [-kM,        -kM,         kM,         kM      ],
-        ])
-        self.Gamma_inv = np.linalg.inv(self.Gamma)
+        self.Q  = np.diag(self.Q_DIAG)
+        self.QN = self.QN_SCALE * self.Q
+        self.R  = np.diag(self.R_DIAG)
 
-        # ── Continuous-time linear model ────────────────────────────────────
-        A_c, B_c = self._build_linear_model()
+        self.Ad, self.Bd = self._build_model()
+        self.calA, self.calB = self._build_prediction_matrices()   # 𝒜, ℬ
+        self._build_qp_matrices()
 
-        # ── ZOH discretisation ──────────────────────────────────────────────
-        Ad, Bd = c2d_zoh(A_c, B_c, self.MPC_DT)
+        # Motor allocation
+        px, py = self.ROTOR_POS[:, 0], self.ROTOR_POS[:, 1]
+        M = np.array([np.ones(4), py, -px, self.ROTOR_DIR * self.K_M])
+        self.M_inv = np.linalg.pinv(M)
 
-        # ── Cost matrices ───────────────────────────────────────────────────
-        Q = np.diag([
-            120.0,  10.0,  900.0,   # position  x, y, z
-             10.0,  10.0,  100.0,   # attitude  φ, θ, ψ
-             10.0,   4.0,   50.0,   # velocity  ẋ, ẏ, ż
-              1.0,   1.0,    1.0,   # ang-rate  φ̇, θ̇, ψ̇
-        ])
-        R = np.diag([10.0, 1.0, 1.0, 1.0])   # [ΔF, Δτ_r, Δτ_p, Δτ_y]
-        P_terminal = dare_terminal(Ad, Bd, Q, R)
+        # Flight-phase state machine
+        self.phase         = Phase.IDLE
+        self.hover_origin  = np.zeros(3)   # [x, y, yaw] locked at takeoff
+        self.hover_entry_t = None
+        self.stable_since  = None          # time when hover stability was first met
+        self.traj_start_t  = None
 
-        # ── Input bounds (deviation from hover) ─────────────────────────────
-        F_max = 4.0 * kF * self.OMEGA_MAX ** 2
-        u_min = np.array([-self.F_hover, -5.0, -5.0, -1.0])
-        u_max = np.array([ F_max - self.F_hover, 5.0, 5.0, 1.0])
+        # External trajectory
+        self.ext_path        = None    # latest nav_msgs/Path received
+        self.ext_path_stamp  = None    # float seconds (ROS clock) when it arrived
+        self._prev_phase     = None    # for transition logging
 
-        # ── Instantiate constrained MPC ─────────────────────────────────────
-        self.get_logger().info('Building MPC prediction matrices …')
-        self.mpc = MPC(
-            Ad, Bd, Q, R, P_terminal,
-            N        = self.MPC_N,
-            u_min    = u_min,
-            u_max    = u_max,
-            phi_max  = self.PHI_MAX,
-            theta_max= self.THETA_MAX,
-            z_floor  = self.Z_FLOOR,
-        )
-        self.get_logger().info(
-            f'Constrained MPC ready.  N={self.MPC_N}  dt={self.MPC_DT}s  '
-            f'φ_max=±{math.degrees(self.PHI_MAX):.0f}°  '
-            f'z_floor={self.Z_FLOOR}m')
+        # Solver warm-start
+        self.state       = np.zeros(12)
+        self.state_ready = False
+        self.dU_warm     = np.zeros(4 * self.N)
 
-        # ── State variables ─────────────────────────────────────────────────
-        self.pos_x = 0.0;  self.pos_y = 0.0;  self.pos_z = 0.0
-        self.vel_x = 0.0;  self.vel_y = 0.0;  self.vel_z = 0.0
-        self.roll  = 0.0;  self.pitch = 0.0;  self.yaw   = 0.0
-        self.ang_vx = 0.0; self.ang_vy = 0.0; self.ang_vz = 0.0
-
-        self._odom_received  = False
-        self._last_time: float | None = None
-        self._t0:        float | None = None
-
-        # ── Dynamic target (updated by /target_pose) ────────────────────────
-        self.TARGET_X   = self.DEFAULT_TARGET_X
-        self.TARGET_Y   = self.DEFAULT_TARGET_Y
-        self.TARGET_Z   = self.DEFAULT_TARGET_Z
-        self.TARGET_YAW = self.DEFAULT_TARGET_YAW
-
-        # ── ROS interfaces ───────────────────────────────────────────────────
-        self.odom_sub   = self.create_subscription(
-            Odometry, '/odom', self._odom_cb, 10)
-        self.target_sub = self.create_subscription(
-            PoseStamped, '/target_pose', self._target_cb, 10)
-        self.cmd_pub    = self.create_publisher(
+        # ROS 2 I/O
+        self.sub_odom = self.create_subscription(
+            Odometry, '/odom', self._cb_odom, 10)
+        self.sub_path = self.create_subscription(
+            Path, '/reference_path', self._cb_path, 1)
+        self.pub_motors = self.create_publisher(
             Actuators, '/motor_commands', 10)
-
-        self.create_timer(self.MPC_DT, self._control_loop)
+        self.timer = self.create_timer(self.DT, self._cb_control)
 
         self.get_logger().info(
-            f'MPC node ready. Target → x={self.TARGET_X}, '
-            f'y={self.TARGET_Y}, z={self.TARGET_Z} m')
+            f'MPC ready | DT={self.DT}s  N={self.N}  '
+            f'horizon={self.N*self.DT:.1f}s  '
+            f'hover_alt={self.HOVER_ALT}m  '
+            f'hover_thrust={m*g:.2f}N  '
+            f'QP_scale={self.qp_scale:.1f}')
+        self.get_logger().info(
+            'Behaviour: HOVER until /reference_path received, '
+            'revert to HOVER if path lost.')
 
-    # ── Linearised model ─────────────────────────────────────────────────────
-    def _build_linear_model(self):
+    # ─────────────────────────────────────────────────────────────────────────
+    # External path callback
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _cb_path(self, msg: Path):
+        self.ext_path       = msg
+        self.ext_path_stamp = self.get_clock().now().nanoseconds * 1e-9
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Discrete model (ZOH)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_model(self):
         m, g = self.MASS, self.GRAVITY
         Ixx, Iyy, Izz = self.IXX, self.IYY, self.IZZ
-        n, p = 12, 4
-        A = np.zeros((n, n))
-        B = np.zeros((n, p))
-        # Kinematics
-        for i in range(6):
-            A[i, i + 6] = 1.0
-        # Gravity coupling
-        A[6, 4] =  g
-        A[7, 3] = -g
-        # Input coupling
-        B[8, 0]  = 1.0 / m
-        B[9, 1]  = 1.0 / Ixx
-        B[10, 2] = 1.0 / Iyy
-        B[11, 3] = 1.0 / Izz
-        return A, B
+        n, p, dt = 12, 4, self.DT
 
-    # ── Target pose callback ─────────────────────────────────────────────────
-    def _target_cb(self, msg: PoseStamped):
-        """Update the MPC setpoint from the trajectory / goal publisher."""
-        self.TARGET_X = msg.pose.position.x
-        self.TARGET_Y = msg.pose.position.y
-        self.TARGET_Z = msg.pose.position.z
+        A = np.zeros((n, n)); B = np.zeros((n, p))
+        A[0,6]=A[1,7]=A[2,8]=1.0
+        A[3,9]=A[4,10]=A[5,11]=1.0
+        A[6,4]=g; A[7,3]=-g
+        B[8,0]=1./m
+        B[9,1]=1./Ixx; B[10,2]=1./Iyy; B[11,3]=1./Izz
 
-        # Extract yaw from quaternion
-        q = msg.pose.orientation
-        siny = 2.0 * (q.w * q.z + q.x * q.y)
-        cosy = 1.0 - 2.0 * (q.y ** 2 + q.z ** 2)
-        self.TARGET_YAW = math.atan2(siny, cosy)
+        AB = np.zeros((n+p, n+p))
+        AB[:n,:n]=A*dt; AB[:n,n:]=B*dt
+        eAB = expm(AB)
+        return eAB[:n,:n], eAB[:n,n:]
 
-    # ── Odometry callback ────────────────────────────────────────────────────
-    def _odom_cb(self, msg: Odometry):
-        p = msg.pose.pose.position
-        v = msg.twist.twist.linear
-        w = msg.twist.twist.angular
-        q = msg.pose.pose.orientation
+    # ─────────────────────────────────────────────────────────────────────────
+    # Prediction matrices  X = calA*x0 + calB*U
+    # ─────────────────────────────────────────────────────────────────────────
 
-        self.pos_x, self.pos_y, self.pos_z = p.x, p.y, p.z
-        self.vel_x, self.vel_y, self.vel_z = v.x, v.y, v.z
-        self.ang_vx, self.ang_vy, self.ang_vz = w.x, w.y, w.z
+    def _build_prediction_matrices(self):
+        """
+        Build 𝒜 (calA) and ℬ (calB) such that X = calA * x0 + calB * U.
 
-        sinr = 2.0 * (q.w * q.x + q.y * q.z)
-        cosr = 1.0 - 2.0 * (q.x ** 2 + q.y ** 2)
-        self.roll = math.atan2(sinr, cosr)
+            𝒜 ∈ ℝ^{nN × n}
+            ℬ ∈ ℝ^{nN × mN}
+        """
+        n, p, N = 12, 4, self.N
+        Ad, Bd = self.Ad, self.Bd
 
-        sinp = 2.0 * (q.w * q.y - q.z * q.x)
-        sinp = max(-1.0, min(1.0, sinp))
-        self.pitch = math.asin(sinp)
+        Ad_pow = [np.eye(n)]
+        for _ in range(N):
+            Ad_pow.append(Ad @ Ad_pow[-1])
 
-        siny = 2.0 * (q.w * q.z + q.x * q.y)
-        cosy = 1.0 - 2.0 * (q.y ** 2 + q.z ** 2)
-        self.yaw = math.atan2(siny, cosy)
+        calA = np.zeros((n*N, n))           # 𝒜
+        calB = np.zeros((n*N, p*N))         # ℬ
+        for k in range(N):
+            calA[k*n:(k+1)*n, :] = Ad_pow[k+1]
+            for j in range(k+1):
+                calB[k*n:(k+1)*n, j*p:(j+1)*p] = Ad_pow[k-j] @ Bd
+        return calA, calB
 
-        self._odom_received = True
+    # ─────────────────────────────────────────────────────────────────────────
+    # QP matrices (with normalisation)
+    # ─────────────────────────────────────────────────────────────────────────
 
-    # ── Main control loop ────────────────────────────────────────────────────
-    def _control_loop(self):
-        if not self._odom_received:
-            return
+    def _build_qp_matrices(self):
+        """
+        Build H and pre-compute ℬᵀQ̄ (calBT_Qbar).
 
-        now = self.get_clock().now().nanoseconds * 1e-9
+            H = ℬᵀ Q̄ ℬ + R̄      (Hessian)
+            F = ℬᵀ Q̄ (𝒜 x0 − X_ref)   (linear term, computed at solve time)
+        """
+        n, p, N = 12, 4, self.N
+        calB = self.calB                     # ℬ
 
-        if self._last_time is None:
-            self._last_time = now
-            self._t0 = now
-            return
+        Q_bar = np.zeros((n*N, n*N))         # Q̄
+        for k in range(N-1):
+            Q_bar[k*n:(k+1)*n, k*n:(k+1)*n] = self.Q
+        Q_bar[(N-1)*n:, (N-1)*n:] = self.QN
 
-        dt = now - self._last_time
-        self._last_time = now
-        if dt <= 1e-6:
-            return
+        R_bar = np.zeros((p*N, p*N))         # R̄
+        for k in range(N):
+            R_bar[k*p:(k+1)*p, k*p:(k+1)*p] = self.R
 
-        # ── Build state error ────────────────────────────────────────────────
-        yaw_err = self.TARGET_YAW - self.yaw
-        yaw_err = (yaw_err + math.pi) % (2.0 * math.pi) - math.pi
+        H_raw = calB.T @ Q_bar @ calB + R_bar
+        H_raw = 0.5 * (H_raw + H_raw.T)
 
-        x_err = np.array([
-            self.TARGET_X - self.pos_x,
-            self.TARGET_Y - self.pos_y,
-            self.TARGET_Z - self.pos_z,
-            0.0           - self.roll,
-            0.0           - self.pitch,
-            yaw_err,
-            0.0           - self.vel_x,
-            0.0           - self.vel_y,
-            0.0           - self.vel_z,
-            0.0           - self.ang_vx,
-            0.0           - self.ang_vy,
-            0.0           - self.ang_vz,
+        scale = max(np.trace(H_raw) / (p * N), 1.0)
+        self.H            = H_raw / scale
+        self.calBT_Qbar   = (calB.T @ Q_bar) / scale   # ℬᵀQ̄  (scaled)
+        self.qp_scale     = scale
+
+        du_min = self.U_MIN - self.u_hover
+        du_max = self.U_MAX - self.u_hover
+        self.qp_bounds = [(float(du_min[i % p]), float(du_max[i % p]))
+                          for i in range(p * N)]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # MPC solver
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _solve_mpc(self, x0, X_ref):
+        """
+        Solve  min_U  ½ Uᵀ H U + Fᵀ U
+        where
+            F = ℬᵀ Q̄ (𝒜 x0 − X_ref)
+        """
+        F = self.calBT_Qbar @ (self.calA @ x0 - X_ref.flatten())   # F
+
+        def cost(dU): return 0.5 * float(dU @ (self.H @ dU)) + float(F @ dU)
+        def grad(dU): return self.H @ dU + F
+
+        result = minimize(cost, self.dU_warm, jac=grad,
+                          method='L-BFGS-B', bounds=self.qp_bounds,
+                          options={'maxiter': 500, 'ftol': 1e-7, 'gtol': 1e-4})
+
+        if not result.success:
+            self.get_logger().debug(
+                f'MPC: {result.message} (nit={result.nit} f={result.fun:.3e})')
+
+        dU_opt = result.x
+        self.dU_warm[:-4] = dU_opt[4:]
+        self.dU_warm[-4:] = 0.0
+        return self.u_hover + dU_opt[:4]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Motor allocation
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _u_to_omega(self, u):
+        forces = np.maximum(self.M_inv @ u, 0.0)
+        omega  = np.sqrt(forces / self.K_F)
+        return np.clip(omega, 0.0, self.OMEGA_MAX)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Odometry callback
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _cb_odom(self, msg):
+        pos = msg.pose.pose.position
+        q   = msg.pose.pose.orientation
+        lv  = msg.twist.twist.linear
+        av  = msg.twist.twist.angular
+        roll, pitch, yaw = quat2rpy(q.x, q.y, q.z, q.w)
+        self.state = np.array([
+            pos.x, pos.y, pos.z,
+            roll, pitch, yaw,
+            lv.x, lv.y, lv.z,
+            av.x, av.y, av.z,
         ])
+        self.state_ready = True
 
-        # ── Solve constrained MPC ────────────────────────────────────────────
-        u0 = self.mpc.compute(x_err, self.pos_z, self.roll, self.pitch)
+    # ─────────────────────────────────────────────────────────────────────────
+    # Control callback
+    # ─────────────────────────────────────────────────────────────────────────
 
-        F_total   = self.F_hover + u0[0]
-        tau_roll  = u0[1]
-        tau_pitch = u0[2]
-        tau_yaw   = u0[3]
+    def _cb_control(self):
+        if not self.state_ready:
+            self._publish_omega(np.zeros(4))
+            return
 
-        # ── Clamp total thrust ───────────────────────────────────────────────
-        F_max   = 4.0 * self.K_F * self.OMEGA_MAX ** 2
-        F_total = float(np.clip(F_total, 0.0, F_max))
+        now_sec = self.get_clock().now().nanoseconds * 1e-9
 
-        # ── Motor mixing ─────────────────────────────────────────────────────
-        wrench   = np.array([F_total, tau_roll, tau_pitch, tau_yaw])
-        omega_sq = self.Gamma_inv @ wrench
-        omega_sq = np.clip(omega_sq, 0.0, self.OMEGA_MAX ** 2)
-        omega    = np.sqrt(omega_sq)
+        # ── Check external path freshness ─────────────────────────────────────
+        path_fresh = (
+            self.ext_path is not None and
+            self.ext_path_stamp is not None and
+            (now_sec - self.ext_path_stamp) < self.EXTERNAL_TRAJ_TIMEOUT
+        )
 
-        # ── Publish ──────────────────────────────────────────────────────────
-        cmd = Actuators()
-        cmd.velocity = [float(w) for w in omega]
-        self.cmd_pub.publish(cmd)
+        # ── Phase state machine ────────────────────────────────────────────────
+        if self.phase == Phase.IDLE:
+            # Lock hover origin at first odometry position
+            self.hover_origin  = np.array([self.state[0],
+                                           self.state[1],
+                                           self.state[5]])
+            self.hover_entry_t = now_sec
+            self.stable_since  = None
+            self.phase         = Phase.HOVER
+            self.get_logger().info(
+                f'Phase -> HOVER  '
+                f'origin=({self.hover_origin[0]:.2f}, {self.hover_origin[1]:.2f})  '
+                f'target_alt={self.HOVER_ALT}m  '
+                f'(will wait indefinitely for /reference_path)')
+
+        elif self.phase == Phase.HOVER:
+            # Check if hover is stable enough to accept a trajectory
+            pos_err  = math.sqrt(
+                (self.state[0] - self.hover_origin[0])**2 +
+                (self.state[1] - self.hover_origin[1])**2 +
+                (self.state[2] - self.HOVER_ALT)**2)
+            vel_norm = float(np.linalg.norm(self.state[6:9]))
+            is_stable = (pos_err < self.HOVER_POS_TOL and
+                         vel_norm < self.HOVER_VEL_TOL)
+
+            if is_stable:
+                if self.stable_since is None:
+                    self.stable_since = now_sec
+            else:
+                self.stable_since = None   # reset if disturbed
+
+            hover_ready = (self.stable_since is not None and
+                           (now_sec - self.stable_since) >= self.HOVER_STABLE_TIME)
+
+            # Only enter TRAJECTORY when hover is stable AND path is available
+            if hover_ready and path_fresh:
+                self.traj_start_t = now_sec
+                self.phase = Phase.TRAJECTORY
+                self.get_logger().info(
+                    f'Phase -> TRAJECTORY  '
+                    f'(hover stable {now_sec - self.stable_since:.1f}s, '
+                    f'external path received)')
+
+        elif self.phase == Phase.TRAJECTORY:
+            # Revert to HOVER if external path goes silent
+            if not path_fresh:
+                self.phase        = Phase.HOVER
+                self.stable_since = None   # re-check stability on return
+                self.get_logger().warn(
+                    f'External /reference_path lost '
+                    f'(>{self.EXTERNAL_TRAJ_TIMEOUT}s silence) — '
+                    f'reverting to HOVER at '
+                    f'({self.state[0]:.2f}, {self.state[1]:.2f}, {self.state[2]:.2f})')
+                # Update hover_origin to current position so drone doesn't
+                # snap back to its original takeoff spot
+                self.hover_origin = np.array([self.state[0],
+                                              self.state[1],
+                                              self.state[5]])
+
+        # ── Build reference & solve ────────────────────────────────────────────
+        X_ref = self._get_reference(now_sec, path_fresh)
+
+        # Align yaw reference to current heading (avoid pi-wrap cost spikes)
+        cur_yaw = self.state[5]
+        for k in range(self.N):
+            X_ref[k, 5] = cur_yaw + wrap_angle(X_ref[k, 5] - cur_yaw)
+
+        u_opt = self._solve_mpc(self.state, X_ref)
+        omega = self._u_to_omega(u_opt)
+        self._publish_omega(omega)
+
+        # ── Diagnostics (~2 Hz) ────────────────────────────────────────────────
+        if int(now_sec * 2) % 4 == 0:
+            pos  = self.state[:3]
+            rpy  = np.degrees(self.state[3:6])
+            ref0 = X_ref[0, :3]
+            err  = float(np.linalg.norm(pos - ref0))
+            du   = u_opt - self.u_hover
+            src  = 'EXT' if (self.phase == Phase.TRAJECTORY and path_fresh) else 'HOV'
+            self.get_logger().info(
+                f'[{self.phase.name:10s}|{src}] '
+                f'pos=[{pos[0]:+.2f},{pos[1]:+.2f},{pos[2]:+.2f}] '
+                f'ref=[{ref0[0]:+.2f},{ref0[1]:+.2f},{ref0[2]:+.2f}] '
+                f'err={err:.3f}m | '
+                f'rpy=[{rpy[0]:+.1f},{rpy[1]:+.1f},{rpy[2]:+.1f}]deg | '
+                f'dF={du[0]:+.2f}N | '
+                f'omega={np.round(omega).astype(int)} rad/s'
+            )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Reference trajectory builder
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _get_reference(self, now_sec, path_fresh):
+        """
+        Return X_ref (N, 12).
+
+        IDLE / HOVER       → constant hover setpoint at hover_origin
+        TRAJECTORY + fresh → horizon built from external /reference_path
+        TRAJECTORY + stale → should not occur (phase reverted above), but
+                             returns hover setpoint as a safety fallback
+        """
+        N, dt = self.N, self.DT
+        hx, hy, hyaw = self.hover_origin
+
+        if self.phase in (Phase.IDLE, Phase.HOVER):
+            return self._hover_setpoint(hx, hy, hyaw, N)
+
+        # TRAJECTORY phase — path is guaranteed fresh (phase reverted otherwise)
+        if path_fresh:
+            return self._build_horizon_from_path(self.ext_path, N, dt)
+
+        # Safety fallback (should not be reached in normal operation)
+        return self._hover_setpoint(hx, hy, hyaw, N)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Constant hover setpoint
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _hover_setpoint(self, hx, hy, hyaw, N):
+        """All N horizon steps fixed at (hx, hy, HOVER_ALT, hyaw), zero velocity."""
+        refs = np.zeros((N, 12))
+        for k in range(N):
+            refs[k] = [hx, hy, self.HOVER_ALT,
+                       0., 0., hyaw,
+                       0., 0., 0.,
+                       0., 0., 0.]
+        return refs
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Build MPC horizon from nav_msgs/Path
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_horizon_from_path(self, path: Path, N: int, dt: float):
+        """
+        Convert a nav_msgs/Path into X_ref (N, 12).
+
+        Pose k  → position + yaw for step k
+        Finite-difference between poses k and k+1 → velocity estimates
+        """
+        poses   = path.poses
+        n_poses = len(poses)
+        refs    = np.zeros((N, 12))
+
+        def get_pose(i):
+            i = min(i, n_poses - 1)
+            p   = poses[i].pose
+            yaw = quat2yaw(p.orientation.z, p.orientation.w)
+            return p.position.x, p.position.y, p.position.z, yaw
+
+        for k in range(N):
+            x0, y0, z0, yaw0 = get_pose(k)
+            x1, y1, z1, yaw1 = get_pose(k + 1)
+
+            vx     = (x1 - x0) / dt
+            vy     = (y1 - y0) / dt
+            vz     = (z1 - z0) / dt
+            yawdot = wrap_angle(yaw1 - yaw0) / dt
+
+            refs[k] = [x0,  y0,  z0,
+                       0.,  0.,  yaw0,
+                       vx,  vy,  vz,
+                       0.,  0.,  yawdot]
+        return refs
+
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _publish_omega(self, omega):
+        msg = Actuators()
+        msg.velocity = [float(w) for w in omega]
+        self.pub_motors.publish(msg)
 
 
-# ── Entry point ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
 def main(args=None):
     rclpy.init(args=args)
-    node = QuadrotorMPCNode()
+    node = MPCController()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -580,6 +554,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

@@ -420,9 +420,9 @@ def main(args=None):
     # ──── EASY SELECTION ──────────────────────────────────────────────────────
     # Choose your trajectory mode: 'HOVER', 'VERTICAL', 'CIRCLE', 'XZ_SQUARE', 'SINE'
     # ──────────────────────────────────────────────────────────────────────────
-    MODE = 'FIG_8_2D'
+    MODE = 'HOVER'
     SPEED = 0.75      # m/s
-    ROUND_TRIP = False # Forward and then back along the same path
+    ROUND_TRIP = True # Forward and then back along the same path
     ALIGN_YAW = False  # Check and adjust yaw toward the direction of travel
     
     trajectories = {
@@ -432,7 +432,7 @@ def main(args=None):
         'XZ_SQUARE': get_plane_trajectory(size=2.0, speed=SPEED, dwell=1.0),
         'SINE':      get_sine_wave_trajectory(amplitude=0.5, freq=0.1, num_waves=1, speed=SPEED, z_base=1.0),
         'LIN_3D':    get_linear_trajectory(start_pos=(0.0, 0.0, 3.0), target_pos=(3.0, 3.0, 4.0), speed=SPEED, dwell=2.0, hz=100.0),
-        'HELIX':     get_helix_trajectory(radius=1.5, height=3.0, turns=2, speed=SPEED, z_base=3.0, dwell=2.0, hz=100.0),
+        'HELIX':     get_helix_trajectory(radius=1.5, height=3.0, turns=2, speed=SPEED, z_base=3.0, dwell=3.0, hz=100.0),
         'SPIRAL':    get_spiral_trajectory(radius_start=2.0, height=3.0, turns=4, speed=SPEED, z_base=3.0, dwell=2.0, hz=100.0),
         'FIG_8':     get_figure_eight_3d(width=3.0, height=1.0, depth=1.0, speed=SPEED),
         'FIG_8_2D':  get_figure_eight_2d_trajectory(width=3.0, height=3.0, speed=SPEED, z_base=3.0, hz=100.0),

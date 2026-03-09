@@ -23,8 +23,10 @@ install(PROGRAMS
   scripts/PID_ken.py
   scripts/PID.py
   scripts/LQR.py
+  scripts/LQR_v1.py
   scripts/MPC.py
   scripts/send_trajectory.py
+  scripts/send_trajectory_2.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
