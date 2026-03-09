@@ -20,6 +20,12 @@ Compatibility with MPC
   MPC finite-differences pose k+1 - pose k and divides by MPC_DT to get velocity.
 
   N_HORIZON = 21 poses  (MPC needs N+1=21 to finite-difference N=20 velocities)
+
+Robustness support (added, structure unchanged)
+-----------------------------------------------
+  Publishes /trajectory_lap_complete (std_msgs/Bool, data=True) each time
+  the waypoint index wraps around to 0 (i.e. one full loop completes).
+  The trajectory_visualizer node subscribes to this to capture per-lap data.
 """
 
 import math
@@ -27,6 +33,7 @@ import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Bool                    # ← ADDED: lap-complete signal
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Utilities
@@ -246,6 +253,7 @@ class TrajectoryNode(Node):
         # ROS interfaces
         self._pub_pose = self.create_publisher(PoseStamped, '/target_pose',    10)
         self._pub_path = self.create_publisher(Path,        '/reference_path',  1)
+        self._pub_lap  = self.create_publisher(Bool,        '/trajectory_lap_complete', 10)  # ← ADDED
         self._sub      = self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
 
         dt = 1.0 / self.PUBLISH_HZ
@@ -323,7 +331,17 @@ class TrajectoryNode(Node):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _advance_waypoint(self, tx, ty, tz, tyaw, now):
-        self._wp_idx      = (self._wp_idx + 1) % len(self._waypoints)
+        # ── ADDED: detect lap completion when index wraps to 0 ────────────────
+        next_idx = (self._wp_idx + 1) % len(self._waypoints)
+        if next_idx == 0:
+            lap_msg = Bool()
+            lap_msg.data = True
+            self._pub_lap.publish(lap_msg)
+            self.get_logger().info(
+                'Trajectory lap complete — /trajectory_lap_complete published.')
+        # ── END ADDED ──────────────────────────────────────────────────────────
+
+        self._wp_idx      = next_idx          # was: (self._wp_idx + 1) % len(...)
         self._start_time  = now
         self._start_pose  = (tx, ty, tz, tyaw)
         self._dwell_start = None

@@ -40,7 +40,7 @@ import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry, Path
 from actuator_msgs.msg import Actuators
-
+from std_msgs.msg import Float64MultiArray
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -102,26 +102,17 @@ class MPCController(Node):
     DT = 0.05
     N  = 20
 
-    # Q_DIAG = np.array([18., 18., 18.,  # x ,y ,z
-    #                    18., 18.,  6.,  # roll , pitch , yaw
-    #                     5.,  5.,  5.,
-    #                     10.,  10.,  0.5])
+    # Q_DIAG = np.array([60., 60., 30.,  # x ,y ,z
+    #                    30., 30.,  5.,  # roll , pitch , yaw
+    #                     20.,  20.,  10.,
+    #                     25.,  25.,  8.0])
 
-
-    # ---------- Hover setup
-    # Q_DIAG = np.array([30., 30., 30.,  # x ,y ,z
-    #                    30., 30.,  15.,  # roll , pitch , yaw
-    #                     5.,  5.,  5.,
-    #                     15.,  15.,  8.0])
-    # QN_SCALE = 5.0
-    # R_DIAG = np.array([0.01, 0.5, 0.5, 1.5])
-
-    Q_DIAG = np.array([60., 60., 30.,  # x ,y ,z
-                       30., 30.,  5.,  # roll , pitch , yaw
+    Q_DIAG = np.array([100., 100., 50.,  # x ,y ,z
+                       30., 30.,  2.,  # roll , pitch , yaw
                         20.,  20.,  10.,
                         25.,  25.,  8.0])
-    QN_SCALE = 5.0
-    R_DIAG = np.array([0.01, 0.5, 0.5, 1.5])
+    QN_SCALE = 3.0
+    R_DIAG = np.array([0.1, 2.0, 2.0, 1.5])
 
     U_MIN = np.array([0.0,   -8.0, -8.0, -3.0])
     U_MAX = np.array([4.0 * MASS * GRAVITY, 8.0, 8.0, 3.0])
@@ -181,6 +172,8 @@ class MPCController(Node):
         self.pub_motors = self.create_publisher(
             Actuators, '/motor_commands', 10)
         self.timer = self.create_timer(self.DT, self._cb_control)
+        self.control_pub = self.create_publisher(
+            Float64MultiArray, '/control_u', 10)
 
         self.get_logger().info(
             f'MPC ready | DT={self.DT}s  N={self.N}  '
@@ -410,6 +403,11 @@ class MPCController(Node):
         u_opt = self._solve_mpc(self.state, X_ref)
         omega = self._u_to_omega(u_opt)
         self._publish_omega(omega)
+
+
+        torque = Float64MultiArray()
+        torque.data = [float(u) for u in u_opt]
+        self.control_pub.publish(torque)
 
         # ── Diagnostics (~2 Hz) ────────────────────────────────────────────────
         if int(now_sec * 2) % 4 == 0:
