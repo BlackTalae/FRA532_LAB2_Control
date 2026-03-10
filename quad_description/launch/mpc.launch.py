@@ -25,6 +25,11 @@ def generate_launch_description():
         executable="MPCNode5.py",
     )
 
+    # mpc_node = Node(
+    #     package="quad_description",
+    #     executable="MPCNode6.py",
+    # )
+
     visualize = Node(
         package="quad_description",
         executable="trajectory_visualizer.py",

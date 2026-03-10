@@ -1,6 +1,7 @@
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/PID.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/LQR.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/MPCNode5.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/MPCNode6.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/trajectory_visualizer.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/dashboard_realtime.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/dashboard_analysis.py

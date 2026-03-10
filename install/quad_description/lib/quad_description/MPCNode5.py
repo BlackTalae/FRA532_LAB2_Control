@@ -94,17 +94,38 @@ class MPCController(Node):
     #     30., 30., 3.0,
     #     2.,  2.,  0.5
     # ])
+    # QN_SCALE = 1.0
     # R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
     
     # Also work for normal!
+    # Q_DIAG = np.array([
+    #     225., 225., 150.,
+    #     45.,  30.,  1.5,
+    #     90., 90., 10.0,
+    #     10.,  6.,  1.5
+    # ])
+    # QN_SCALE = 1.0
+    # R_DIAG = np.array([0.1, 3.5, 1.0, 3.5])
+
+    # Cooked!!!
+    # Q_DIAG = np.array([
+    #     400., 600., 30.,
+    #     25.,  25.,  0.5,
+    #     12., 12., 3.0,
+    #     2.,  2.,  0.5
+    # ])
+    # QN_SCALE = 1.0
+    # R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
+    
     Q_DIAG = np.array([
-        225., 225., 150.,
-        45.,  30.,  1.5,
-        90., 90., 10.0,
-        10.,  6.,  1.5
+        450., 675., 36.,
+        60.,  50.,  5.5,
+        11., 10., 3.5,
+        2.,  2.,  1.5
     ])
     QN_SCALE = 1.0
-    R_DIAG = np.array([0.1, 3.5, 1.0, 3.5])
+    R_DIAG = np.array([0.01, 1.19, 1.0, 2.0])
+    
 
     U_MIN = np.array([0.0, -5.0, -5.0, -3.0])
     U_MAX = np.array([4.0 * MASS * GRAVITY, 5.0, 5.0, 3.0])
@@ -397,6 +418,7 @@ class MPCController(Node):
                 self.get_logger().warn('Path timeout -> HOVER')
 
         X_ref = self._get_reference(path_fresh)
+        self.get_logger().info(f'{X_ref[0,1]} , {X_ref[19,1]}')
 
         # Align yaw reference near current yaw to avoid wrap jumps
         cur_yaw = self.state[5]

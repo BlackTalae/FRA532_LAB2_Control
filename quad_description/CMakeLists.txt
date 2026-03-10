@@ -23,6 +23,7 @@ install(PROGRAMS
   scripts/PID.py
   scripts/LQR.py
   scripts/MPCNode5.py
+  scripts/MPCNode6.py
   scripts/trajectory_visualizer.py
   scripts/dashboard_realtime.py
   scripts/dashboard_analysis.py
