@@ -24,6 +24,8 @@ install(PROGRAMS
   scripts/PID.py
   scripts/LQR.py
   scripts/LQR_v1.py
+  scripts/LQI.py
+  scripts/iLQR.py
   scripts/MPC.py
   scripts/send_trajectory.py
   scripts/send_trajectory_2.py

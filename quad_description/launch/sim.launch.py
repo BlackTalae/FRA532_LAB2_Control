@@ -25,7 +25,7 @@ def generate_launch_description():
 
     spawn_x_val = "0.0"
     spawn_y_val = "0.0"
-    spawn_z_val = "3.0"
+    spawn_z_val = "2.0"
 
     # Paths
     rviz_file_path = os.path.join(get_package_share_directory(package_name), "rviz", rviz_file_name)
@@ -121,7 +121,7 @@ def generate_launch_description():
     )
 
     trajectory = TimerAction(
-        period=5.0,
+        period=0.0,
         actions=[
             Node(
                 package="quad_description",

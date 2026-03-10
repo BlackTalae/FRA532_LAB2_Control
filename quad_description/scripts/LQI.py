@@ -1,48 +1,36 @@
 #!/usr/bin/env python3
 """
-Quadrotor LQR Controller
-========================
-Controls a quadrotor to hold a fixed position (x, y, z) using a Linear
-Quadratic Regulator (LQR).
+Quadrotor Integral LQR (LQI) Controller
+========================================
+Extends the standard LQR with an **integrator** on position and yaw errors
+to eliminate steady-state offset from disturbances or model mismatch.
+
+Architecture
+------------
+The control law is:
+
+    u = u_hover + K · error_12 + Ki · integ_4
+
+where:
+  - K   (4×12)  : exact same gain as LQR.py (solves 12-state CARE)
+  - Ki  (4×4)   : separate integral gain matrix, physics-motivated
+  - error_12    : full 12-state error vector  (ref − current)
+  - integ_4     : integral of [ex, ey, ez, eψ] over time
+
+This two-gain structure is cleaner and safer than augmenting the state for
+CARE: K is guaranteed to match the working LQR baseline (stable hover), and
+Ki adds a slow correction layer that pulls the drone to the reference over
+several seconds without disturbing the proportional action.
+
+Ki sign convention (from linearised dynamics at hover):
+  ẍ = g·θ  →  ∫ex > 0 → want +θ → +τ_pitch  (Ki[τ_p, ∫ex] > 0)
+  ÿ = -g·φ →  ∫ey > 0 → want -φ → -τ_roll   (Ki[τ_r, ∫ey] < 0)
+  z̈ = F/m  →  ∫ez > 0 → want +F              (Ki[F,   ∫ez] > 0)
+  ψ̈ = τy/Iz→  ∫eψ > 0 → want +τ_yaw         (Ki[τ_y, ∫eψ] > 0)
 
 Subscribes to: /odom         (nav_msgs/Odometry)
                /target_pose  (geometry_msgs/PoseStamped)
 Publishes to:  /motor_commands (actuator_msgs/Actuators)
-
-Physical parameters (from robot_params.xacro):
-  mass        = 1.525 kg
-  k_F         = 8.54858e-06  [N / (rad/s)^2]
-  k_M         = 0.06         [dimensionless torque ratio]
-  Ixx         = 0.0356547    [kg·m²]
-  Iyy         = 0.0705152    [kg·m²]
-  Izz         = 0.0990924    [kg·m²]
-  omega_max   = 1500         rad/s
-  arm_length  = 0.22 m
-
-State vector  x  (12×1):
-  [x, y, z, φ(roll), θ(pitch), ψ(yaw), ẋ, ẏ, ż, φ̇, θ̇, ψ̇]
-
-Input vector  u  (4×1):
-  [F_total, τ_roll, τ_pitch, τ_yaw]
-
-The LQR gain matrix K (4×12) maps state error to inputs:
-  u = u_hover + K · (x_ref - x)
-
-Motor layout (top view, X-config):
-        front (+x)
-          2   0
-      left     right
-          1   3
-        rear (-x)
-
-  Motor 0: front-right (+x, -y)  CCW
-  Motor 1: rear-left   (-x, +y)  CCW
-  Motor 2: front-left  (+x, +y)  CW
-  Motor 3: rear-right  (-x, -y)  CW
-
-Motor mixing (force/torque → omega²):
-  Given k_F, k_M, arm length L the allocation matrix Γ maps
-  [F, τ_r, τ_p, τ_y] → [w0², w1², w2², w3²] via Γ⁻¹.
 """
 
 import math
@@ -57,7 +45,7 @@ from geometry_msgs.msg import PoseStamped
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Helper functions  (same interface as MPC.py)
+# Helper functions
 # ─────────────────────────────────────────────────────────────────────────────
 
 def quat2rpy(qx, qy, qz, qw):
@@ -85,233 +73,222 @@ def wrap_angle(a):
 def lqr(A: np.ndarray, B: np.ndarray,
         Q: np.ndarray, R: np.ndarray) -> np.ndarray:
     """
-    Solve the continuous-time LQR problem.
-
-    Minimises:  J = ∫ (x'Qx + u'Ru) dt
-
-    Returns the gain matrix K such that u = -Kx is optimal.
-    Internally solves the Continuous Algebraic Riccati Equation (CARE):
-        A'P + PA − PBR⁻¹B'P + Q = 0
-    then  K = R⁻¹ B' P.
+    Solve continuous-time LQR:  A'P + PA − PBR⁻¹B'P + Q = 0  →  K = R⁻¹B'P.
+    Returns K (m×n) such that u = -K·x is optimal.
     """
     P = solve_continuous_are(A, B, Q, R)
-    K = np.linalg.inv(R) @ B.T @ P
-    return K
+    return np.linalg.inv(R) @ B.T @ P
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LQR controller wrapper (stateless – the node owns the state)
+# LQI controller
 # ─────────────────────────────────────────────────────────────────────────────
 
-class LQR:
+class LQI:
     """
-    Thin wrapper around a pre-computed LQR gain matrix.
+    Integral LQR controller with explicit proportional K and integral Ki.
 
-    Usage:
-        controller = LQR(K)
-        u_correction = controller.compute(state_error)   # shape (4,)
+    Usage
+    -----
+        ctrl = LQI(K, Ki)
+        u_corr = ctrl.compute(error_12, dt)
+
+    Call ctrl.reset() when the target changes significantly.
     """
 
-    def __init__(self, K: np.ndarray):
+    # Anti-windup limits for [∫ex, ∫ey, ∫ez, ∫eψ]  (m·s, m·s, m·s, rad·s)
+    # ∫ey is larger: 4 m/s wind in -Y needs proportionally more integral
+    INTEG_LIM = np.array([5.0, 10.0, 3.0, 0.8])
+
+    def __init__(self, K: np.ndarray, Ki: np.ndarray):
         """
         Parameters
         ----------
-        K : ndarray, shape (4, 12)
-            Full-state feedback gain matrix (computed offline via lqr()).
+        K  : (4, 12)  proportional-derivative gain from 12-state CARE
+        Ki : (4,  4)  integral gain matrix mapping [∫ex,∫ey,∫ez,∫eψ] → u
         """
-        self.K = K  # (4 × 12)
+        self.K    = K                  # 4 × 12
+        self.Ki   = Ki                 # 4 × 4
+        self.integ = np.zeros(4)       # [∫ex, ∫ey, ∫ez, ∫eψ]
 
-    def compute(self, error: np.ndarray) -> np.ndarray:
+    def reset(self):
+        """Zero the integrator (call when the target changes significantly)."""
+        self.integ[:] = 0.0
+
+    def compute(self, error: np.ndarray, dt: float) -> np.ndarray:
         """
-        Return the control *correction* for the given state error.
+        Return the control correction u_corr (shape 4).
 
         Parameters
         ----------
-        error : ndarray, shape (12,)
-            State error  x_ref - x_current  (positive = below target).
-
-        Returns
-        -------
-        u_corr : ndarray, shape (4,)
-            [dF, dτ_roll, dτ_pitch, dτ_yaw] to add to the hover trim.
+        error : (12,)  state error  x_ref - x_current
+        dt    : float  time step [s]
         """
-        return self.K @ error   # K (4×12) @ error (12,) → (4,)
+        # Integrate position and yaw errors
+        self.integ += np.array([
+            error[0],   # ∫(x_ref − x)
+            error[1],   # ∫(y_ref − y)
+            error[2],   # ∫(z_ref − z)
+            error[5],   # ∫(ψ_ref − ψ)
+        ]) * dt
+
+        # Anti-windup
+        self.integ = np.clip(self.integ, -self.INTEG_LIM, self.INTEG_LIM)
+
+        # Proportional + integral correction
+        return self.K @ error + self.Ki @ self.integ
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ROS 2 Node
 # ─────────────────────────────────────────────────────────────────────────────
 
-class QuadrotorLQRNode(Node):
+class QuadrotorLQINode(Node):
 
-    # ── Physical constants ────────────────────────────────────────────────────
-    GRAVITY   = 9.81            # m/s²
-    K_F       = 8.54858e-06     # N / (rad/s)²
-    K_M       = 0.06            # N·m / (rad/s)²
-    OMEGA_MAX = 1500.0          # rad/s
+    # ── Physical constants ─────────────────────────────────────────────────────
+    GRAVITY   = 9.81
+    K_F       = 8.54858e-06
+    K_M       = 0.06
+    OMEGA_MAX = 1500.0
 
-    MASS = 1.525                # kg
-    IXX  = 0.0356547            # kg·m²
-    IYY  = 0.0705152            # kg·m²
-    IZZ  = 0.0990924            # kg·m²
+    MASS = 1.525
+    IXX  = 0.0356547
+    IYY  = 0.0705152
+    IZZ  = 0.0990924
 
-    # Arm length (distance from CoM to rotor along body x/y axis)
-    L = 0.22                    # m
+    L = 0.22
 
-    # ── Default target pose (overridden live by /target_pose) ─────────────────
-    DEFAULT_TARGET_X   = 0.0   # m
-    DEFAULT_TARGET_Y   = 0.0   # m
-    DEFAULT_TARGET_Z   = 1.0   # m
-    DEFAULT_TARGET_YAW = 0.0   # rad
+    # ── Default target pose ────────────────────────────────────────────────────
+    DEFAULT_TARGET_X   = 0.0
+    DEFAULT_TARGET_Y   = 0.0
+    DEFAULT_TARGET_Z   = 1.0
+    DEFAULT_TARGET_YAW = 0.0
 
     def __init__(self):
-        super().__init__('quadrotor_lqr_node')
+        super().__init__('quadrotor_lqi_node')
 
         # ── Hover trim ────────────────────────────────────────────────────────
-        self.F_hover  = self.MASS * self.GRAVITY
-        self.u_hover  = np.array([self.F_hover, 0.0, 0.0, 0.0])
-        omega_hover   = math.sqrt(self.F_hover / (4.0 * self.K_F))
+        self.F_hover = self.MASS * self.GRAVITY
+        self.u_hover = np.array([self.F_hover, 0.0, 0.0, 0.0])
+        omega_hover  = math.sqrt(self.F_hover / (4.0 * self.K_F))
         self.get_logger().info(
             f'Hover ω: {omega_hover:.1f} rad/s  F_hover: {self.F_hover:.2f} N')
 
-        # ── Motor allocation matrix Γ (4×4)  [w0², w1², w2², w3²] ───────────
-        #  Sign conventions (X-config from URDF):
-        #    Motor 0 (FR): +0.13x, -0.22y  CCW (+)
-        #    Motor 1 (RL): -0.13x, +0.20y  CCW (+)
-        #    Motor 2 (FL): +0.13x, +0.22y  CW  (-)
-        #    Motor 3 (RR): -0.13x, -0.20y  CW  (-)
-        #  τ_roll  = Σ (y_i * F_i)
-        #  τ_pitch = Σ (-x_i * F_i)
-        #  τ_yaw   = Σ (-k_M * F_i) for CCW, (+k_M * F_i) for CW
-        kF, kM = self.K_F, self.K_M
+        # ── Motor allocation matrix Γ (4×4) ──────────────────────────────────
+        kF, kM, LL = self.K_F, self.K_M, self.L
         self.Gamma = np.array([
-            [ kF,        kF,        kF,        kF       ],   # Thrust
-            [-kF * 0.22, kF * 0.20, kF * 0.22, -kF * 0.20],  # τ_roll  (lever y)
-            [-kF * 0.22, kF * 0.20,-kF * 0.22, kF * 0.20],  # τ_pitch (lever -x)
-            # [-kF * 0.13, kF * 0.13, -kF * 0.13, kF * 0.13],  # τ_pitch (lever -x)
-            [-kF * kM,  -kF * kM,   kF * kM,   kF * kM  ],   # τ_yaw   (kM ratio)
+            [ kF,       kF,       kF,       kF      ],
+            [-kF * LL,  kF * 0.2, kF * LL, -kF * 0.2],
+            [-kF * LL,  kF * 0.2,-kF * LL,  kF * 0.2],
+            [-kM,      -kM,       kM,        kM     ],
         ])
         self.Gamma_inv = np.linalg.inv(self.Gamma)
 
-        # ── Linearised model A, B ─────────────────────────────────────────────
+        # ── Build 12-state linearised model (identical to LQR.py) ────────────
         A, B = self._build_linear_model()
 
-        # ── LQR weight matrices Q and R ───────────────────────────────────────
-        #   State: [x,   y,   z,    φ,   θ,   ψ,   ẋ,  ẏ,  ż,   φ̇,  θ̇,  ψ̇]
-        #
-        #  Q: penalise position error heavily; attitude moderately.
-        #  R: low values allow the controller to use large corrections →
-        #     faster disturbance rejection and tighter trajectory following.
-
-        #   State: [x, y, z, φ, θ, ψ, ẋ, ẏ, ż, φ̇, θ̇, ψ̇]
-        # "Super-Stable" wind tuning:
-        #   Q(y/ẏ) 300/60 : authority to hold position vs wind
-        #   Q(z)   600    : softened to prevent altitude bounce
-        #   R(τ)   5.0    : HEAVILY penalise torque usage (stops jitter)
+        # ── Q and R — tuned for Helix Tracking (0.75 m/s) ───────────────────
+        # Q(x/y) ↑ 200 : faster position correction (reduced lag)
+        # Q(vx/vy) ↑ 40 : more damping for stable high-speed tracking
+        # Q(z)   900   : baseline altitude hold
+        # Q(yaw) 2000  : firm yaw hold (less than the 5000 wind-stiffness)
+        # R(F) ↓ 0.8   : allow more aggressive thrust for vertical segments
         Q = np.diag([
-            120.0,  300.0,  600.0,   # position  x, y↑, z↓
-            10.0,   10.0,   2000.0,  # attitude  φ, θ, ψ
-            10.0,   60.0,   50.0,    # velocity  ẋ, ẏ↑, ż
-            5.0,    5.0,    10.0,    # ang-rate  φ̇, θ̇, ψ̇
+            200.0, 200.0, 900.0,    # position  x↑, y↑, z
+            10.0,  10.0,  2000.0,   # attitude  φ, θ, ψ
+            40.0,  40.0,  50.0,     # velocity  ẋ↑, ẏ↑, ż
+            1.0,   1.0,   10.0,     # ang-rate  φ̇, θ̇, ψ̇
         ])
-        #   Input: [F_total, τ_roll, τ_pitch, τ_yaw]
         R = np.diag([
-            1.0,    # F
-            5.0,    # τ_roll  (Smoothed)
-            5.0,    # τ_pitch (Smoothed)
-            5.0,    # τ_yaw   (Smoothed)
+            0.8,    # F_total (lowered to 0.8)
+            1.0,    # τ_roll
+            1.0,    # τ_pitch
+            0.001,  # τ_yaw
+        ])
+        K = lqr(A, B, Q, R)
+
+        # ── Integral gain Ki (4×4) ─────────────────────────────────────────────
+        # ki_r moderate (not too large, oscillation risk):
+        #   wind pushes -Y → integ[1] goes negative → -ki_r * neg = positive τ_r
+        #   → positive roll → thrust Y-component pushes back → wind balanced
+        ki_F   = 0.15    # thrust integral per m·s of z-error
+        ki_r   = 0.12    # roll-torque integral
+        ki_p   = 0.08    # pitch-torque integral
+        ki_yaw = 0.02    # yaw-torque integral (4× raised: fight wind yaw drift)
+        Ki = np.array([
+            [0.0,   0.0,    ki_F,   0.0    ],   # dF ← ∫ez
+            [0.0,  -ki_r,   0.0,    0.0    ],   # dτ_roll ← -∫ey
+            [ki_p,  0.0,    0.0,    0.0    ],   # dτ_pitch ← +∫ex
+            [0.0,   0.0,    0.0,    ki_yaw ],   # dτ_yaw ← ∫eψ
         ])
 
-        K = lqr(A, B, Q, R)
-        self.lqr_ctrl = LQR(K)
-        self.get_logger().info(f'LQR gain K computed (shape {K.shape})')
+        self.lqi_ctrl = LQI(K, Ki)
+        self.get_logger().info(
+            f'LQI ready | K shape {K.shape} | Ki:\n{Ki}')
 
-        # ── Target setpoint (updated by /target_pose) ─────────────────────────
+        # ── Target setpoint ───────────────────────────────────────────────────
         self.TARGET_X   = self.DEFAULT_TARGET_X
         self.TARGET_Y   = self.DEFAULT_TARGET_Y
         self.TARGET_Z   = self.DEFAULT_TARGET_Z
         self.TARGET_YAW = self.DEFAULT_TARGET_YAW
 
-        # ── Drone state  [x, y, z, φ, θ, ψ, ẋ, ẏ, ż, φ̇, θ̇, ψ̇] ─────────────
-        #    Same layout as MPC.py: self.state (12,), self.state_ready flag
+        # ── Drone state ───────────────────────────────────────────────────────
         self.state       = np.zeros(12)
         self.state_ready = False
+        self._last_time  = None
 
         # ── ROS interfaces ─────────────────────────────────────────────────────
         self.create_subscription(Odometry,    '/odom',        self._cb_odom,   10)
         self.create_subscription(PoseStamped, '/target_pose', self._cb_target,  10)
         self.cmd_pub = self.create_publisher(Actuators, '/motor_commands', 10)
 
-        # Control loop at 100 Hz
         self.create_timer(0.01, self._cb_control)
 
         self.get_logger().info(
-            f'LQR node ready | listening on /target_pose | '
-            f'default target → ({self.TARGET_X}, {self.TARGET_Y}, {self.TARGET_Z}) m')
+            f'LQI node ready | default target → '
+            f'({self.TARGET_X}, {self.TARGET_Y}, {self.TARGET_Z}) m')
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Linearised quadrotor model
+    # Linearised quadrotor model (identical to LQR.py)
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_linear_model(self):
         """
-        Return (A, B) for the linearised quadrotor dynamics around hover.
+        Return (A, B) for linearised hover dynamics.
 
-        State  x  = [x, y, z, φ, θ, ψ, ẋ, ẏ, ż, φ̇, θ̇, ψ̇]  (12)
-        Input  u  = [F_total, τ_roll, τ_pitch, τ_yaw]           (4)
-
-        Hover equilibrium: φ=θ=ψ=0, ẋ=ẏ=ż=φ̇=θ̇=ψ̇=0, F0=mg.
-
-        Linearised translational accelerations (body≈world at hover):
-            ẍ =  g·θ
-            ÿ = -g·φ
-            z̈ = F/m − g
-
-        Linearised rotational accelerations:
-            φ̈ = τ_roll  / Ixx
-            θ̈ = τ_pitch / Iyy
-            ψ̈ = τ_yaw   / Izz
+        State  x = [x, y, z, φ, θ, ψ, ẋ, ẏ, ż, φ̇, θ̇, ψ̇]  (12)
+        Input  u = [F, τ_roll, τ_pitch, τ_yaw]                 (4)
         """
         m, g = self.MASS, self.GRAVITY
         Ixx, Iyy, Izz = self.IXX, self.IYY, self.IZZ
 
-        # State indices:  0  1  2  3  4  5  6   7   8   9   10  11
-        #                 x  y  z  φ  θ  ψ  ẋ   ẏ   ż   φ̇   θ̇   ψ̇
         n, p = 12, 4
         A = np.zeros((n, n))
         B = np.zeros((n, p))
 
-        # Kinematics: ṗos = vel
-        A[0, 6] = A[1, 7] = A[2, 8] = 1.0   # ẋ, ẏ, ż → dx/dt
-        A[3, 9] = A[4, 10] = A[5, 11] = 1.0  # φ̇, θ̇, ψ̇ → dφ/dt
+        A[0, 6] = A[1, 7] = A[2, 8] = 1.0
+        A[3, 9] = A[4, 10] = A[5, 11] = 1.0
 
-        # Translational dynamics (linearised gravity coupling)
         A[6, 4] =  g    # ẍ ← g·θ
         A[7, 3] = -g    # ÿ ← −g·φ
 
-        # Input coupling — translational
-        B[8, 0] = 1.0 / m    # z̈ ← F/m
-
-        # Input coupling — rotational
-        B[9,  1] = 1.0 / Ixx  # φ̈ ← τ_roll / Ixx
-        B[10, 2] = 1.0 / Iyy  # θ̈ ← τ_pitch / Iyy
-        B[11, 3] = 1.0 / Izz  # ψ̈ ← τ_yaw / Izz
+        B[8, 0]  = 1.0 / m
+        B[9,  1] = 1.0 / Ixx
+        B[10, 2] = 1.0 / Iyy
+        B[11, 3] = 1.0 / Izz
 
         return A, B
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Odometry callback  (mirrors MPC._cb_odom)
+    # Odometry callback
     # ─────────────────────────────────────────────────────────────────────────
 
     def _cb_odom(self, msg: Odometry):
-        """Pack sensor data into self.state — same layout as MPC.py."""
         pos = msg.pose.pose.position
         q   = msg.pose.pose.orientation
         lv  = msg.twist.twist.linear
         av  = msg.twist.twist.angular
-
         roll, pitch, yaw = quat2rpy(q.x, q.y, q.z, q.w)
-
         self.state = np.array([
             pos.x, pos.y, pos.z,
             roll, pitch, yaw,
@@ -325,28 +302,49 @@ class QuadrotorLQRNode(Node):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _cb_target(self, msg: PoseStamped):
-        """Update setpoint from /target_pose."""
-        self.TARGET_X = msg.pose.position.x
-        self.TARGET_Y = msg.pose.position.y
-        self.TARGET_Z = msg.pose.position.z
+        new_x = msg.pose.position.x
+        new_y = msg.pose.position.y
+        new_z = msg.pose.position.z
 
         q = msg.pose.orientation
         siny = 2.0 * (q.w * q.z + q.x * q.y)
         cosy = 1.0 - 2.0 * (q.y ** 2 + q.z ** 2)
-        self.TARGET_YAW = math.atan2(siny, cosy)
+        new_yaw = math.atan2(siny, cosy)
+
+        dist = math.sqrt((new_x - self.TARGET_X)**2 +
+                         (new_y - self.TARGET_Y)**2 +
+                         (new_z - self.TARGET_Z)**2)
+        if dist > 0.3 or abs(wrap_angle(new_yaw - self.TARGET_YAW)) > 0.175:
+            self.lqi_ctrl.reset()
+            self.get_logger().info(
+                f'Target changed ({dist:.2f} m) → integrators reset')
+
+        self.TARGET_X   = new_x
+        self.TARGET_Y   = new_y
+        self.TARGET_Z   = new_z
+        self.TARGET_YAW = new_yaw
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Control loop
+    # Control loop (100 Hz)
     # ─────────────────────────────────────────────────────────────────────────
 
     def _cb_control(self):
         if not self.state_ready:
             return
 
-        now_sec = self.get_clock().now().nanoseconds * 1e-9
+        now_ns  = self.get_clock().now().nanoseconds
+        now_sec = now_ns * 1e-9
+
+        # dt (clamped)
+        if self._last_time is None:
+            dt = 0.01
+        else:
+            dt = float(np.clip((now_ns - self._last_time) * 1e-9, 0.001, 0.1))
+        self._last_time = now_ns
 
         # ── State error in BODY FRAME ──────────────────────────────────────────
-        # Rotate world-frame x,y errors into body-heading frame.
+        # Rotate world-frame x,y errors into body frame. This is essential
+        # for helix tracking where yaw angle changes constantly.
         yaw     = self.state[5]
         cos_psi = math.cos(yaw)
         sin_psi = math.sin(yaw)
@@ -379,18 +377,18 @@ class QuadrotorLQRNode(Node):
             0.0           - self.state[11],
         ])
 
-        # ── LQR correction ────────────────────────────────────────────────────
-        u_corr    = self.lqr_ctrl.compute(error)   # [dF, dτ_r, dτ_p, dτ_y]
-        u_opt     = self.u_hover + u_corr
+        # ── LQI correction ────────────────────────────────────────────────────
+        u_corr = self.lqi_ctrl.compute(error, dt)
+        u_opt  = self.u_hover + u_corr
 
-        # Clamp total thrust
-        F_max     = 4.0 * self.K_F * self.OMEGA_MAX ** 2
-        u_opt[0]  = float(np.clip(u_opt[0], 0.0, F_max))
+        # Clamp thrust
+        F_max    = 4.0 * self.K_F * self.OMEGA_MAX ** 2
+        u_opt[0] = float(np.clip(u_opt[0], 0.0, F_max))
 
-        # ── Motor mixing: Γ⁻¹ · [F, τ_r, τ_p, τ_y] → ω ──────────────────────
-        omega_sq  = self.Gamma_inv @ u_opt
-        omega_sq  = np.clip(omega_sq, 0.0, self.OMEGA_MAX ** 2)
-        omega     = np.sqrt(omega_sq)
+        # ── Motor mixing ──────────────────────────────────────────────────────
+        omega_sq = self.Gamma_inv @ u_opt
+        omega_sq = np.clip(omega_sq, 0.0, self.OMEGA_MAX ** 2)
+        omega    = np.sqrt(omega_sq)
 
         # ── Publish ───────────────────────────────────────────────────────────
         cmd = Actuators()
@@ -399,16 +397,19 @@ class QuadrotorLQRNode(Node):
 
         # ── Diagnostics (~2 Hz) ───────────────────────────────────────────────
         if int(now_sec * 2) % 4 == 0:
-            pos  = self.state[:3]
-            rpy  = np.degrees(self.state[3:6])
-            ref  = np.array([self.TARGET_X, self.TARGET_Y, self.TARGET_Z])
-            err  = float(np.linalg.norm(pos - ref))
-            du   = u_opt - self.u_hover
+            pos   = self.state[:3]
+            rpy   = np.degrees(self.state[3:6])
+            ref   = np.array([self.TARGET_X, self.TARGET_Y, self.TARGET_Z])
+            err   = float(np.linalg.norm(pos - ref))
+            du    = u_opt - self.u_hover
+            integ = self.lqi_ctrl.integ
             self.get_logger().info(
                 f'pos=[{pos[0]:+.2f},{pos[1]:+.2f},{pos[2]:+.2f}] '
                 f'ref=[{ref[0]:+.2f},{ref[1]:+.2f},{ref[2]:+.2f}] '
                 f'err={err:.3f}m | '
                 f'rpy=[{rpy[0]:+.1f},{rpy[1]:+.1f},{rpy[2]:+.1f}]deg | '
+                f'integ=[{integ[0]:+.3f},{integ[1]:+.3f},'
+                f'{integ[2]:+.3f},{integ[3]:+.3f}] | '
                 f'dF={du[0]:+.2f}N | '
                 f'omega={np.round(omega).astype(int)} rad/s'
             )
@@ -418,7 +419,7 @@ class QuadrotorLQRNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = QuadrotorLQRNode()
+    node = QuadrotorLQINode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

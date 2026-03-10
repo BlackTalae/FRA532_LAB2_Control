@@ -364,14 +364,14 @@ def main(args=None):
     rclpy.init(args=args)
 
     # ── SELECT TRAJECTORY ────────────────────────────────────────────────────
-    MODE       = 'HOVER'
+    MODE       = 'HELIX'
     SPEED      = 0.75
     ROUND_TRIP = True
     ALIGN_YAW  = False
     # ─────────────────────────────────────────────────────────────────────────
 
     trajectories = {
-        'HOVER':     get_hover_trajectory(z=3.0, dwell=3.0),
+        'HOVER':     get_hover_trajectory(z=2.0, dwell=3.0),
         'VERTICAL':  get_vertical_trajectory(z_min=1.0, z_max=4.0, speed=SPEED, dwell=2.0),
         'CIRCLE':    get_circle_trajectory(radius=1.5, y=0.0, speed=SPEED, dwell=0.0),
         'XZ_SQUARE': get_plane_trajectory(size=2.0, speed=SPEED, dwell=1.0),
