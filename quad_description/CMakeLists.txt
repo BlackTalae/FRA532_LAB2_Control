@@ -22,6 +22,11 @@ find_package(ament_cmake REQUIRED)
 install(PROGRAMS
   scripts/PID.py
   scripts/LQR.py
+  scripts/MPCNode5.py
+  scripts/trajectory_visualizer.py
+  scripts/dashboard_realtime.py
+  scripts/dashboard_analysis.py
+  scripts/send_traject.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

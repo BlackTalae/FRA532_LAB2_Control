@@ -1,5 +1,10 @@
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/PID.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/LQR.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/MPCNode5.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/trajectory_visualizer.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/dashboard_realtime.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/dashboard_analysis.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/send_traject.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/gazebo_full.xacro
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/quadrotor_base.xacro
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/robot_params.xacro
@@ -9,6 +14,7 @@
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.jpg
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/sim.launch.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/rsp.launch.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/mpc.launch.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gz_bridge.yaml
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gaz_ros2_ctl_use_sim.yaml
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds/wind.sdf
