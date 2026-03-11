@@ -187,8 +187,8 @@ class QuadrotorLQRNode(Node):
         self.Gamma = np.array([
             [ kF,        kF,        kF,        kF       ],   # Thrust
             [-kF * 0.22, kF * 0.20, kF * 0.22, -kF * 0.20],  # τ_roll  (lever y)
-            [-kF * 0.22, kF * 0.20,-kF * 0.22, kF * 0.20],  # τ_pitch (lever -x)
-            # [-kF * 0.13, kF * 0.13, -kF * 0.13, kF * 0.13],  # τ_pitch (lever -x)
+            # [-kF * 0.22, kF * 0.20,-kF * 0.22, kF * 0.20],  # τ_pitch (lever -x)
+            [-kF * 0.13, kF * 0.13, -kF * 0.13, kF * 0.13],  # τ_pitch (lever -x)
             [-kF * kM,  -kF * kM,   kF * kM,   kF * kM  ],   # τ_yaw   (kM ratio)
         ])
         self.Gamma_inv = np.linalg.inv(self.Gamma)
