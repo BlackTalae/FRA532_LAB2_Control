@@ -116,7 +116,17 @@ class MPCController(Node):
     # ])
     # QN_SCALE = 1.0
     # R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
+
     
+    # Q_DIAG = np.array([
+    #     450., 675., 36.,
+    #     60.,  50.,  5.5,
+    #     11., 10., 3.5,
+    #     2.,  2.,  1.5
+    # ])
+    # QN_SCALE = 1.0
+    # R_DIAG = np.array([0.01, 1.19, 1.0, 2.0])
+
     # Q_DIAG = np.array([
     #     600., 630., 36.,
     #     60.,  50.,  5.5,
@@ -126,15 +136,14 @@ class MPCController(Node):
     # QN_SCALE = 1.0
     # R_DIAG = np.array([0.01, 1.19, 1.0, 2.0])
 
-    
     Q_DIAG = np.array([
-        600., 630., 36.,
-        60.,  50.,  5.5,
-        11., 10., 3.5,
-        2.,  2.,  1.5
+        325., 325., 60.,
+        50.,  50.,  5.5,
+        2., 2., 3.0,
+        2.,  2.,  1.0
     ])
     QN_SCALE = 1.0
-    R_DIAG = np.array([0.01, 1.19, 1.0, 2.0])
+    R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
 
     U_MIN = np.array([0.0, -5.0, -5.0, -3.0])
     U_MAX = np.array([4.0 * MASS * GRAVITY, 5.0, 5.0, 3.0])
@@ -427,7 +436,6 @@ class MPCController(Node):
                 self.get_logger().warn('Path timeout -> HOVER')
 
         X_ref = self._get_reference(path_fresh)
-        self.get_logger().info(f'{X_ref[0,1]} , {X_ref[19,1]}')
 
         # Align yaw reference near current yaw to avoid wrap jumps
         cur_yaw = self.state[5]
@@ -487,7 +495,8 @@ class MPCController(Node):
             vy = (y1 - y0) / dt
             vz = (z1 - z0) / dt
             yawdot = wrap_angle(yaw1 - yaw0) / dt
-
+            yaw = 0
+            yawdot = 0
             refs[k] = [
                 x0, y0, z0,
                 0.0, 0.0, yaw0,

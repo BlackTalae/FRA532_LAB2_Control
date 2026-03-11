@@ -69,10 +69,20 @@ class TrajectoryVisualizer(Node):
         super().__init__('trajectory_visualizer')
 
         self.declare_parameter('robustness_mode', False)
-        self.declare_parameter('num_laps', 5)
+        self.declare_parameter('num_laps', 1)
         # Fallback limits used only if /range_min|max never arrive
         self.declare_parameter('u_min', 0.0)
         self.declare_parameter('u_max', 1500.0)
+
+        self.declare_parameter('auto_save', False)
+        self.declare_parameter('save_dir', 'trajectory_results')
+
+        self.auto_save = bool(self.get_parameter('auto_save').value)
+        self.save_dir = str(self.get_parameter('save_dir').value)
+        self._final_save_data = None
+        self._save_requested = False
+        self._save_done = False
+
 
         self.robustness_mode = self.get_parameter('robustness_mode').value
         self.num_laps        = int(self.get_parameter('num_laps').value)
@@ -120,11 +130,10 @@ class TrajectoryVisualizer(Node):
         self._start_received = threading.Event()
         self._started = False
 
-
+        self.create_subscription(
+            Bool, '/trajectory_lap_complete', self._cb_lap, 10)
 
         if self.robustness_mode:
-            self.create_subscription(
-                Bool, '/trajectory_lap_complete', self._cb_lap, 10)
             self.get_logger().info(
                 f'[Viz] Robustness ON — {self.num_laps} laps expected')
         else:
@@ -236,7 +245,9 @@ class TrajectoryVisualizer(Node):
 
     # ── /trajectory_lap_complete ──────────────────────────────────────────────
     def _cb_lap(self, msg: Bool):
-        if not msg.data: return
+        if not msg.data:
+            return
+
         with self._lock:
             lap_num = len(self._laps) + 1
             snap = dict(
@@ -247,23 +258,67 @@ class TrajectoryVisualizer(Node):
                 ez=list(self._ez), et=list(self._et),
                 cx=list(self._cx), cy=list(self._cy),
                 cz=list(self._cz), ct=list(self._ct),
+                mt=list(self._mt),
+                motors=[list(m) for m in self._motors],
                 max_ex=self._max_ex, max_ey=self._max_ey,
                 max_ez=self._max_ez, max_et=self._max_et,
                 total_cum=self._ct_acc,
+                u_min=self._u_min.copy() if self._u_min is not None else None,
+                u_max=self._u_max.copy() if self._u_max is not None else None,
             )
-            self._laps.append(snap); self._lap_new = True
-            for q in (self._t, self._ox, self._oy, self._oz,
-                      self._rx, self._ry, self._rz,
-                      self._ex, self._ey, self._ez, self._et,
-                      self._cx, self._cy, self._cz, self._ct,
-                      self._mt, *self._motors):
+
+            self._laps.append(snap)
+            self._lap_new = True
+
+            if self.auto_save and lap_num >= self.num_laps:
+                self._final_save_data = dict(
+                    t=np.asarray(snap['t'], float),
+                    ox=np.asarray(snap['ox'], float),
+                    oy=np.asarray(snap['oy'], float),
+                    oz=np.asarray(snap['oz'], float),
+                    rx=np.asarray(snap['rx'], float),
+                    ry=np.asarray(snap['ry'], float),
+                    rz=np.asarray(snap['rz'], float),
+                    ex=np.asarray(snap['ex'], float),
+                    ey=np.asarray(snap['ey'], float),
+                    ez=np.asarray(snap['ez'], float),
+                    et=np.asarray(snap['et'], float),
+                    cx=np.asarray(snap['cx'], float),
+                    cy=np.asarray(snap['cy'], float),
+                    cz=np.asarray(snap['cz'], float),
+                    ct=np.asarray(snap['ct'], float),
+                    mt=np.asarray(snap['mt'], float),
+                    motors=[np.asarray(m, float) for m in snap['motors']],
+                    max_ex=snap['max_ex'],
+                    max_ey=snap['max_ey'],
+                    max_ez=snap['max_ez'],
+                    max_et=snap['max_et'],
+                    laps=list(self._laps),
+                    lap_new=True,
+                    u_min=snap['u_min'],
+                    u_max=snap['u_max'],
+                )
+                self._save_requested = True
+                self.get_logger().info('[Viz] Final lap reached — frozen snapshot prepared for save')
+
+            for q in (
+                self._t, self._ox, self._oy, self._oz,
+                self._rx, self._ry, self._rz,
+                self._ex, self._ey, self._ez, self._et,
+                self._cx, self._cy, self._cz, self._ct,
+                self._mt, *self._motors
+            ):
                 q.clear()
+
             self._cx_acc = self._cy_acc = self._cz_acc = self._ct_acc = 0.0
-            self._last_t = None; self._t0 = None
+            self._last_t = None
+            self._t0 = None
             self._max_ex = self._max_ey = self._max_ez = self._max_et = 0.0
+
             self.get_logger().info(
                 f'[Viz] Lap {lap_num} saved | cum={snap["total_cum"]:.3f} m·s | '
-                f'{max(0, self.num_laps-lap_num)} remaining')
+                f'{max(0, self.num_laps-lap_num)} remaining'
+            )
 
     # ── Thread-safe snapshot ──────────────────────────────────────────────────
     def get_data(self) -> dict:
@@ -303,9 +358,30 @@ class TrajectoryVisualizer(Node):
             self.get_logger().warn('[Viz] Start signal wait timed out')
         return ok
     
+    def request_save(self):
+        with self._lock:
+            if self.auto_save and not self._save_done:
+                self._save_requested = True
+
+    def consume_save_request(self):
+        with self._lock:
+            if self._save_requested and not self._save_done:
+                self._save_requested = False
+                self._save_done = True
+                return True
+            return False
+        
+    def consume_final_save_data(self):
+        with self._lock:
+            data = self._final_save_data
+            self._final_save_data = None
+            return data
+    
+    
 # ═════════════════════════════════════════════════════════════════════════════
 # Entry point
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -335,14 +411,8 @@ def main(args=None):
         fig_an, artists_an, info_an = an.build_normal()
 
     def _anim(frame):
-
-        # if not node._start_received.is_set():
-        #     info_rt.set_text('Waiting for /trajectory_started ...')
-        #     return []
-        
         d = node.get_data()
-        
-        # Propagate live bound updates into artists (controller may refine them)
+
         if d['u_min'] is not None:
             artists_rt['u_min'] = d['u_min']
             artists_rt['u_max'] = d['u_max']
@@ -363,7 +433,46 @@ def main(args=None):
         except Exception as exc:
             node.get_logger().error(f'[Viz/AN] {exc}')
 
+        if node.consume_save_request():
+            try:
+                frozen = node.consume_final_save_data()
+
+                if frozen is not None:
+                    if frozen['u_min'] is not None:
+                        artists_rt['u_min'] = frozen['u_min']
+                        artists_rt['u_max'] = frozen['u_max']
+
+                    rt.update(frozen, artists_rt, info_rt)
+
+                    if node.robustness_mode:
+                        an.update_robustness(axes_an, frozen['laps'])
+                    else:
+                        an.update_normal(frozen, artists_an, info_an)
+
+                fig_rt.canvas.draw()
+                fig_an.canvas.draw()
+                _save_figures()
+            except Exception as exc:
+                node.get_logger().error(f'[Viz/SAVE] {exc}')
+
         return []
+    
+    def _save_figures():
+        os.makedirs(node.save_dir, exist_ok=True)
+
+        timestamp = time.strftime('%Y%m%d_%H%M%S')
+        mode = 'robustness' if node.robustness_mode else 'normal'
+
+        path_rt = os.path.join(node.save_dir, f'{timestamp}_{mode}_realtime.png')
+        path_an = os.path.join(node.save_dir, f'{timestamp}_{mode}_analysis.png')
+
+        fig_rt.savefig(path_rt, dpi=200, bbox_inches='tight')
+        fig_an.savefig(path_an, dpi=200, bbox_inches='tight')
+
+        node.get_logger().info(f'[Viz] Saved realtime window  -> {path_rt}')
+        node.get_logger().info(f'[Viz] Saved analysis window -> {path_an}')
+        
+
 
     anim = FuncAnimation(fig_rt, _anim, interval=ANIM_MS,  # noqa: F841
                          blit=False, cache_frame_data=False)

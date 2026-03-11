@@ -20,8 +20,9 @@ find_package(ament_cmake REQUIRED)
 
 # Install Python executables
 install(PROGRAMS
-  scripts/PID.py
+  # scripts/PID.py
   scripts/LQR.py
+  scripts/LQI.py
   scripts/MPCNode5.py
   scripts/MPCNode6.py
   scripts/trajectory_visualizer.py

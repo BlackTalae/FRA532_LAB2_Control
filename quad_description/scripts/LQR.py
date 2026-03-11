@@ -224,17 +224,19 @@ class QuadrotorLQRNode(Node):
         #     5.0,    5.0,    10.0,    # ang-rate  φ̇, θ̇, ψ̇
         # ])
 
+        # Ken
         Q = np.diag([
-            500.0,  500.0,  300.0,   # position  x, y↑, z↓
+            400.0,  400.0,  80.0,   # position  x, y↑, z↓
             60.0,   60.0,   15.0,  # attitude  φ, θ, ψ
-            120.0,   120.0,   50.0,    # velocity  ẋ, ẏ↑, ż
+            45.0,   40.0,   30.0,    # velocity  ẋ, ẏ↑, ż
             5.0,    5.0,    4.0,    # ang-rate  φ̇, θ̇, ψ̇
         ])
+        
         #   Input: [F_total, τ_roll, τ_pitch, τ_yaw]
         R = np.diag([
-            1.0,    # F
-            5.0,    # τ_roll  (Smoothed)
-            5.0,    # τ_pitch (Smoothed)
+            0.1,    # F
+            3.0,    # τ_roll  (Smoothed)
+            3.0,    # τ_pitch (Smoothed)
             5.0,    # τ_yaw   (Smoothed)
         ])
 
@@ -395,6 +397,10 @@ class QuadrotorLQRNode(Node):
         vx_body  =  cos_psi * vx_world + sin_psi * vy_world
         vy_body  = -sin_psi * vx_world + cos_psi * vy_world
 
+        v_x_target = (self.TARGET_X - self.TARGET_X_)/ 0.01
+        v_y_target = (self.TARGET_Y - self.TARGET_Y_)/ 0.01
+        v_z_target = (self.TARGET_Z - self.TARGET_Z_)/ 0.01
+
         yaw_err = wrap_angle(self.TARGET_YAW - self.state[5])
         error = np.array([
             ex_body,
@@ -403,9 +409,9 @@ class QuadrotorLQRNode(Node):
             0.0           - self.state[3],
             0.0           - self.state[4],
             yaw_err,
-            0.0 - vx_body,
-            0.0 - vy_body,
-            0.0           - self.state[8],
+            v_x_target - vx_body,
+            v_y_target - vy_body,
+            v_z_target    - self.state[8],
             0.0           - self.state[9],
             0.0           - self.state[10],
             0.0           - self.state[11],
@@ -442,14 +448,14 @@ class QuadrotorLQRNode(Node):
             ref  = np.array([self.TARGET_X, self.TARGET_Y, self.TARGET_Z])
             err  = float(np.linalg.norm(pos - ref))
             du   = u_opt - self.u_hover
-            self.get_logger().info(
-                f'pos=[{pos[0]:+.2f},{pos[1]:+.2f},{pos[2]:+.2f}] '
-                f'ref=[{ref[0]:+.2f},{ref[1]:+.2f},{ref[2]:+.2f}] '
-                f'err={err:.3f}m | '
-                f'rpy=[{rpy[0]:+.1f},{rpy[1]:+.1f},{rpy[2]:+.1f}]deg | '
-                f'dF={du[0]:+.2f}N | '
-                f'omega={np.round(omega).astype(int)} rad/s'
-            )
+            # self.get_logger().info(
+            #     f'pos=[{pos[0]:+.2f},{pos[1]:+.2f},{pos[2]:+.2f}] '
+            #     f'ref=[{ref[0]:+.2f},{ref[1]:+.2f},{ref[2]:+.2f}] '
+            #     f'err={err:.3f}m | '
+            #     f'rpy=[{rpy[0]:+.1f},{rpy[1]:+.1f},{rpy[2]:+.1f}]deg | '
+            #     f'dF={du[0]:+.2f}N | '
+            #     f'omega={np.round(omega).astype(int)} rad/s'
+            # )
 
     def _cb_start_request_timer(self):
         """
