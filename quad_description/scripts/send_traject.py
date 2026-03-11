@@ -65,7 +65,7 @@ def add_yaw_alignment(points, is_round_trip=False):
     return aligned
 
 
-def make_round_trip(points):
+def make_round_trip(points, END_DWELL=None):
     """
     Example: [A, B, C] -> [A, B, C, B, A]
     """
@@ -73,7 +73,14 @@ def make_round_trip(points):
         return []
     if len(points) == 1:
         return list(points)
-    return list(points) + list(points[-2::-1])
+    
+    if END_DWELL is not None:
+        last = points[-2::-1]
+        dwell = append_hold_segment(points, END_DWELL, TrajectoryNode.PUBLISH_HZ)
+        
+        return dwell + last
+    else:
+        return list(points) + list(points[-2::-1])
 
 
 def append_hold_segment(points, hold_s, hz):
@@ -392,7 +399,7 @@ class TrajectoryNode(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    MODE = 'HELIX'
+    MODE = 'SINE'
     SPEED = 0.75
     ROUND_TRIP = True
     ALIGN_YAW = False
@@ -400,16 +407,28 @@ def main(args=None):
 
     trajectories = {
         'HOVER':    get_hover_trajectory(z=2.0, hold_s=3.0, hz=TrajectoryNode.PUBLISH_HZ),
-        'VERTICAL': get_vertical_trajectory(z_min=1.0, z_max=4.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        'VERTICAL': get_vertical_trajectory(z_min=2.0, z_max=5.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'CIRCLE':   get_circle_trajectory(radius=1.5, y=0.0, z_base=2.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'XZ_SQUARE': get_plane_trajectory(size=2.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
-        'SINE':     get_sine_wave_trajectory(amplitude=0.5, freq=0.1, num_waves=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
-        'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 3.0, 3.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
-        'HELIX':    get_helix_trajectory(radius=1.5, height=2.0, turns=2, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
+        'SINE':     get_sine_wave_trajectory(amplitude=0.8, freq=0.075, num_waves=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
+        'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 5.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        'HELIX':    get_helix_trajectory(radius=1.75, height=2.0, turns=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
         'SPIRAL':   get_spiral_trajectory(radius_start=2.0, height=2.0, turns=3, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
         'FIG_8':    get_figure_eight_3d(width=3.0, height=1.0, depth=1.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'FIG_8_2D': get_figure_eight_2d_trajectory(width=3.0, height=3.0, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
     }
+        # 1D
+        # 'VERTICAL': get_vertical_trajectory(z_min=2.0, z_max=5.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        # 'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 2.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        # 'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 5.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+
+        # 2D
+        # 'SINE':     get_sine_wave_trajectory(amplitude=0.8, freq=0.075, num_waves=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
+
+        # 3D
+        # 'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 2.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        # 'HELIX':    get_helix_trajectory(radius=2.0, height=2.0, turns=2, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
+
 
     if MODE not in trajectories:
         print(f"Error: Mode '{MODE}' not found. Options: {list(trajectories.keys())}")
@@ -418,14 +437,17 @@ def main(args=None):
 
     waypoints = trajectories[MODE]
 
+    # if END_DWELL > 0.0 and MODE != 'HOVER':
+
     if ROUND_TRIP:
-        waypoints = make_round_trip(waypoints)
+        waypoints = make_round_trip(waypoints,END_DWELL=END_DWELL)
+
+    if END_DWELL > 0.0 and MODE != 'HOVER':
+        waypoints = append_hold_segment(waypoints, END_DWELL, TrajectoryNode.PUBLISH_HZ)
 
     if ALIGN_YAW:
         waypoints = add_yaw_alignment(waypoints, is_round_trip=ROUND_TRIP)
 
-    if END_DWELL > 0.0 and MODE != 'HOVER':
-        waypoints = append_hold_segment(waypoints, END_DWELL, TrajectoryNode.PUBLISH_HZ)
 
     node = TrajectoryNode(waypoints)
     try:

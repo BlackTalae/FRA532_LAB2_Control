@@ -117,15 +117,24 @@ class MPCController(Node):
     # QN_SCALE = 1.0
     # R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
     
+    # Q_DIAG = np.array([
+    #     600., 630., 36.,
+    #     60.,  50.,  5.5,
+    #     11., 10., 3.5,
+    #     2.,  2.,  1.5
+    # ])
+    # QN_SCALE = 1.0
+    # R_DIAG = np.array([0.01, 1.19, 1.0, 2.0])
+
+    
     Q_DIAG = np.array([
-        450., 675., 36.,
+        600., 630., 36.,
         60.,  50.,  5.5,
         11., 10., 3.5,
         2.,  2.,  1.5
     ])
     QN_SCALE = 1.0
     R_DIAG = np.array([0.01, 1.19, 1.0, 2.0])
-    
 
     U_MIN = np.array([0.0, -5.0, -5.0, -3.0])
     U_MAX = np.array([4.0 * MASS * GRAVITY, 5.0, 5.0, 3.0])

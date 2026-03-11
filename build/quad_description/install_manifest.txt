@@ -16,6 +16,7 @@
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/sim.launch.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/rsp.launch.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/mpc.launch.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/lqr.launch.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gz_bridge.yaml
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gaz_ros2_ctl_use_sim.yaml
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds/wind.sdf

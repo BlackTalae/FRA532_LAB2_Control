@@ -66,7 +66,7 @@ def generate_launch_description():
     # launch_description.add_action(rviz)
     launch_description.add_action(mpc_node)
     launch_description.add_action(gazebo_sim)
-    # launch_description.add_action(visualize)
+    launch_description.add_action(visualize)
     launch_description.add_action(trajectory)
 
 
