@@ -325,6 +325,9 @@ class QuadrotorLQRNode(Node):
         self.state_ready = True
 
         # ── Update path history for Rviz ──────────────────────────────────────
+        self.history_path.header.stamp    = msg.header.stamp
+        self.history_path.header.frame_id = msg.header.frame_id
+
         node_pose = PoseStamped()
         node_pose.header = msg.header
         node_pose.pose = msg.pose.pose
