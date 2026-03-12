@@ -137,7 +137,18 @@ The system is modeled as $\dot{\mathbf{x}} = A\mathbf{x} + B\mathbf{u}$ lineariz
 
 $$
 \begin{bmatrix} 
-\dot{x} \\ \dot{y} \\ \dot{z} \\ \dot{\phi} \\ \dot{\theta} \\ \dot{\psi} \\ \ddot{x} \\ \ddot{y} \\ \ddot{z} \\ \ddot{\phi} \\ \ddot{\theta} \\ \ddot{\psi} 
+\dot{x} \\ 
+\dot{y} \\ 
+\dot{z} \\ 
+\dot{\phi} \\ 
+\dot{\theta} \\ 
+\dot{\psi} \\ 
+\ddot{x} \\ 
+\ddot{y} \\ 
+\ddot{z} \\ 
+\ddot{\phi} \\ 
+\ddot{\theta} \\ 
+\ddot{\psi} 
 \end{bmatrix} = 
 \begin{bmatrix} 
 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
