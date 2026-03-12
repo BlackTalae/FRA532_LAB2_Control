@@ -127,7 +127,7 @@ k_F & k_F & k_F & k_F \\
 \omega_3^2 \end{bmatrix}
 $$
 
-*Note: $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.*
+*Note:* $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.
 
 
 
@@ -226,7 +226,7 @@ The LQR controller in `LQR.py` is implemented through the following systematic s
 4.  **Solve Algebraic Riccati Equation (ARE)**: Compute the unique positive-definite matrix $P$ using `scipy.linalg.solve_continuous_are`:
     $$A^T P + PA - PBR^{-1}B^T P + Q = 0$$
 5.  **Compute Optimal Gain ($K$)**: Calculate the gain matrix as $K = R^{-1} B^T P$.
-6.  **Apply Control Law**: Compute the control correction $\mathbf{u}_{corr} = K \cdot (\mathbf{x}_{ref} - \mathbf{x}_{current})$ and add it to the hover trim $\mathbf{u}_{hover}$.
+6.  **Apply Control Law**: Compute the control correction $\mathbf{u}_{corr} = K \cdot (\mathbf{x_{ref}} - \mathbf{x_{current}})$ and add it to the hover trim $\mathbf{u_{hover}}$.
 7.  **Motor Mixing**: Map the control inputs $[F, \tau_r, \tau_p, \tau_y]$ to individual motor speeds using $\Gamma^{-1}$.
 
 ### B. Model Predictive Control (MPC)
@@ -557,7 +557,7 @@ MPC works by predicting future system behavior using a model, optimizing a seque
 </p>
 
 **Prediction Horizon**
-- The prediction horizon ​$N_p$  efines the number of future time steps over which the system states are predicted using the model
+- The prediction horizon ​$N_{p}$  efines the number of future time steps over which the system states are predicted using the model
 - The model simulates the future system behavior over ​$N_p$ steps assuming a sequence of future control inputs.
 
 $$x_{k+1}, x_{k+2} , x_{k+3} , \dots, x_{k+N_{p}}$$
@@ -565,25 +565,28 @@ $$x_{k+1}, x_{k+2} , x_{k+3} , \dots, x_{k+N_{p}}$$
 The optimizer minimizes a cost function defined over these predicted states.
 
 **Control Horizon**
-- The control horizon ​$N_c$ defines the number of independent control inputs optimized by the controller.
+- The control horizon ​$N_{c}$ defines the number of independent control inputs optimized by the controller.
 
 $$N_{c} \le N_{p}$$
 
 - After $N_c$ , the control input is usually held constant for the remaining prediction horizon:
 
-$$u_{k+i} = u_{k+N_{c}-1}, i \ge N_{c}$$
+$$
+u_{k+i} = u_{k+N_{c}-1}, i \ge N_{c}
+$$
+
 ---
 
 #### 3. Weight Design ($Q$ and $R$ Matrices)
 The performance of the MPC is heavily influenced by the weight matrices:
 - **$Q$ Matrix (State Cost)**: Penalizes deviations from the reference trajectory. We prioritize $X, Y$ position tracking for accuracy, followed by velocities and attitudes.
 - **$R$ Matrix (Input Cost)**: Penalizes large control inputs to ensure smooth behavior and prevent motor saturation. High torque penalties reduce high-frequency jitter.
-- **$Q_N$ (Terminal Cost)**: Penalizes the error at the end of the horizon, typically scaled higher ($5.0\times$) to ensure stability.
+- **$Q_N$ (Terminal Cost)**: Penalizes the error at the end of the horizon, in this work we do not use this term ($Q_N$ = 0)
 
 #### 4. Key Features
-- **Lookahead Horizon**: $N=20$ steps with $DT=0.05s$ provides a **1.0-second** lookahead window, allowing the drone to anticipate turns.
+- **Lookahead Horizon**: $N=20$ steps with $DT=0.01s$ provides a **0.2-second** lookahead window, allowing the drone to anticipate turns.
 - **Constrained Optimization**: Control inputs are strictly bounded to physical limits:
-  - Total Thrust: $[0, 4mg]$
+  - Total Thrust: $[0, 4k_f \omega_{max}^2]$
   - Torques: $\tau_{roll/pitch} \in [-8, 8]$, $\tau_{yaw} \in [-3, 3]$
 - **Numerical Stability**:
   - **Hessian Normalization**: Normalizes $H$ by its trace to improve solver convergence (L-BFGS-B).
