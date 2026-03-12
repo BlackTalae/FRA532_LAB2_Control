@@ -801,4 +801,4 @@ We measure the error between the reference trajectory $\mathbf{x}_{ref}(t)$ and 
 4. tune in wind environment
 5. fine tune to make it more robust
 
-On the other hand, both controller can add the DOB (Disturbance observer) to estimate the disturbance and can reject the other disturbance to our system 
+On the other hand, both controller can add the DOB (Disturbance observer) to estimate the disturbance and can reject the other disturbance to our system too. 

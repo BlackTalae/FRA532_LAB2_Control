@@ -1,0 +1,52 @@
+-- Found ament_cmake: 1.3.12 (/opt/ros/humble/share/ament_cmake/cmake)
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/pavaris/FRA532_LAB2_Control/build/quad_description
+-- Install configuration: ""
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/LQR.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/LQI.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/iLQR.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/MPCNode5.py
+-- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/send_traject.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/trajectory_visualizer.py
+-- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/dashboard_realtime.py
+-- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/dashboard_analysis.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/gazebo_full.xacro
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/quadrotor_base.xacro
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/robot_params.xacro
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/quadrotor_base copy.xacro
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/ccw.stl
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.dae
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/cw.stl
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.jpg
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/lqi.launch.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/sim.launch.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/rsp.launch.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/mpc.launch.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/lqr.launch.py
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gz_bridge.yaml
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gaz_ros2_ctl_use_sim.yaml
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds/wind.sdf
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds/empty.sdf
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/rviz
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/rviz/sim.rviz
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/package_run_dependencies/quad_description
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/parent_prefix_path/quad_description
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/ament_prefix_path.sh
+-- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/ament_prefix_path.dsv
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/path.sh
+-- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/path.dsv
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.bash
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.sh
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.zsh
+-- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.dsv
+-- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/package.dsv
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/packages/quad_description
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/cmake/quad_descriptionConfig.cmake
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/cmake/quad_descriptionConfig-version.cmake
+-- Up-to-date: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/package.xml

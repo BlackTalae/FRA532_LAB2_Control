@@ -31,6 +31,8 @@ install(PROGRAMS
   # scripts/send_trajectory_2.py
   scripts/send_traject.py
   scripts/trajectory_visualizer.py
+  scripts/dashboard_realtime.py
+  scripts/dashboard_analysis.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
