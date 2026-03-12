@@ -132,6 +132,8 @@ $$
 
 
 ## 5. Controller
+In this work we use 2 model-based controller, Linear Quadratic Regulartor and Model predictive control to control the drone follows the trajectory. Control frequency of both controller are fixed at `100 Hz` 
+
 
 ### A. Linear Quadratic Regulator (LQR)
 LQR is an optimal control method that minimizes a cost function $J$ to find the optimal gain matrix $K$. In this project, it is used for precise hover and position hold.
@@ -228,6 +230,23 @@ The LQR controller in `LQR.py` is implemented through the following systematic s
 5.  **Compute Optimal Gain ($K$)**: Calculate the gain matrix as $K = R^{-1} B^T P$.
 6.  **Apply Control Law**: Compute the control correction $u_{corr} = K \cdot (x_{ref} - x_{current})$ and add it to the hover trim $u_{hover}$.
 7.  **Motor Mixing**: Map the control inputs $[F, \tau_r, \tau_p, \tau_y]$ to individual motor speeds using $\Gamma^{-1}$.
+
+In this work we using parameter define as
+
+$$Q = 
+\begin{bmatrix}
+  400.0 &  400.0 & 80.0 \\   
+  60.0 &  60.0 &  15.0 \\  
+  45.0 &  40.0 &  30.0 \\    
+  5.0  &    5.0  &    4.0   
+\end{bmatrix}$$
+
+$$R = 
+\begin{bmatrix}
+  0.1 &  3.0 & 3.0 & 5.0\\   
+\end{bmatrix}$$
+
+
 
 ### B. Model Predictive Control (MPC)
 
@@ -600,6 +619,61 @@ The performance of the MPC is heavily influenced by the weight matrices:
 <!-- 5. **Optimization**: Solve the constrained QP problem at **20 Hz** using the L-BFGS-B algorithm. -->
 5. **Actuation**: Apply the first control chunk $u_0$ and repeat.
 
+Our parameter $Q,R,N_p,N_c$ are given:
+
+$$Q = 
+\begin{bmatrix}
+  550.0 &  550.0 & 36.0 \\   
+  75.0 &  55.0 &  5.5 \\  
+  30.0 &  30.0 &  3.5 \\    
+  2.0  &    2.0  &    1.5   
+\end{bmatrix}$$
+
+$$R = 
+\begin{bmatrix}
+  0.01 &  1.0 & 1.0 & 2.0\\   
+\end{bmatrix}$$
+
+$$N_p = N_c = 20$$
+
+> Note : our MPC is constrain only the dynamic model and the output limit
+
+The physical constrain is
+$$
+\bm{U}_{min} = \begin{bmatrix}
+0 \\
+-5 \\
+-5 \\
+-3 \\
+\end{bmatrix}
+$$
+
+$$
+\bm{U}_{max} = \begin{bmatrix}
+4mg \\
+5 \\
+5 \\
+3 \\
+\end{bmatrix} = \begin{bmatrix}
+14.96 \\
+5 \\
+5 \\
+3 \\
+\end{bmatrix} 
+$$
+
+in our implementation we have our offset in for thrust force
+
+$$
+u_k = u_{hover} + \Delta u
+$$
+
+We need to optimize $\Delta u$ so we can get new boundary as
+
+$$
+U_{min} - u_{hover} \le \Delta u \ge U_{min} - u_{hover}
+$$
+
 ## 6. Test Trajectories
 
 The `send_trajectory_2.py` utility provides several predefined patterns for testing controller performance. These trajectories generate a time-sequenced `nav_msgs/Path` for controlling drone.
@@ -713,3 +787,18 @@ We measure the error between the reference trajectory $\mathbf{x}_{ref}(t)$ and 
 
 - The figure illustrate that both controller can tracking the trajectory but the controller inputs (F_roll, F_pitch)  are majority difference.
 - With currently parameters, with the cumulative error and robustness LQR controller  is better than the MPC.
+
+### Problem
+- Although both controller are robust and precise in normal condition, but when it face with the random disturbance such as constant wind, or other force LQR can handle the force, but the error is slightly increasing. On the other hand, very high offset can be seen in MPC especially in X-axis cause of effect of wind. These control cannot observe the disturbance of the system, so we need hard fine tuning for $Q,R$ value the robust to disturbance, or we use some disturbance observer for rejected the disturbance.
+
+- `MPC`
+
+### Improvement
+**X-Axis error in MPC** Firstly, **we tune the MPC controller in `non-wind Helix` environment**, so we do not see the increasing of error in X,Y axis when robot is hovering. We think root of this problem is **`parameter tuning`** that robot is not ssymmetry  and current parameter is not good for disturbance. To fixed these problem we should following new pipeline 
+1. tuning MPC in hovering state first 
+2. then tuning in wind condition to hover  
+3. tracking the trajectory in normal condition
+4. tune in wind environment
+5. fine tune to make it more robust
+
+On the other hand, both controller can add the DOB (Disturbance observer) to estimate the disturbance and can reject the other disturbance to our system 
