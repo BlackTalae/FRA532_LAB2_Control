@@ -1,42 +1,90 @@
 # Quadrotor Control Project: Optimal & Predictive Control
 
-This project explores the design and implementation of advanced control strategies for a quadrotor in a ROS 2 / Gazebo simulation environment. It covers **Linear Quadratic Regulator (LQR)**, **Integral-LQR (LQI)**, and **Model Predictive Control (MPC)**.
+This project explores the design and implementation of advanced control strategies for a quadrotor in Gazebo simulation environment. It covers **Linear Quadratic Regulator (LQR)** and **Model Predictive Control (MPC)**.
 
 ---
 
 ## 1. System Architecture
 
-The project consists of three primary control nodes:
-1.  **LQR Controller (`LQR.py`)**: A 12-state optimal controller targeting hover and position hold.
-2.  **LQI Controller (`LQI.py`)**: An extension of LQR with 4 integral states ($x, y, z, \psi$) to eliminate steady-state error under constant disturbances.
-3.  **MPC Controller (`MPC.py`)**: A predictive controller that optimizes control inputs over a future horizon ($N=20$) for high-performance trajectory tracking.
-4.  **Trajectory Generator (`send_trajectory_2.py`)**: A utility to publish time-varying reference paths (Circle, Helix, etc.).
+Add later
 
 ---
 
 ## 2. Dynamic Modeling & Linearization
 
-The quadrotor is a nonlinear system. For linear control (LQR/LQI/MPC), we linearize it around the **hover equilibrium**.
+The quadrotor is a nonlinear system. For linear control, we linearize it around the **hover equilibrium**.
 
-### A. Linearized State-Space Model
-The system is expressed as: $\mathbf{\dot{x}} = A\mathbf{x} + B\mathbf{u}$
+### Full Nonlinear Dynamics
+Translational accelerations in the world frame ($\ddot{x}, \ddot{y}, \ddot{z}$) and angular accelerations in the body frame ($\ddot{\phi}, \ddot{\theta}, \ddot{\psi}$):
+- $\ddot{x} = \frac{1}{m} (\cos\phi \sin\theta \cos\psi + \sin\phi \sin\psi) F_{total}$
 
-**State Vector ($\mathbf{x}$):** 12 states
-$\mathbf{x} = [x, y, z, \phi, \theta, \psi, \dot{x}, \dot{y}, \dot{z}, \dot{\phi}, \dot{\theta}, \dot{\psi}]^T$
+- $\ddot{y} = \frac{1}{m} (\cos\phi \sin\theta \sin\psi - \sin\phi \cos\psi) F_{total}$
 
-**Input Vector ($\mathbf{u}$):** 4 inputs
-$\mathbf{u} = [F_{total}, \tau_{roll}, \tau_{pitch}, \tau_{yaw}]^T$
+- $\ddot{z} = \frac{1}{m} (\cos\phi \cos\theta) F_{total} - g$
 
-**Linearized Matrices (A & B):**
-Assuming small angles ($\phi, \theta \approx 0$) and $F_{total} \approx mg$:
+- $\ddot{\phi} = \frac{\tau_{roll}}{I_{xx}}$
+
+- $\ddot{\theta} = \frac{\tau_{pitch}}{I_{yy}}$
+
+- $\ddot{\psi} = \frac{\tau_{yaw}}{I_{zz}}$
+
+### Linearized Dynamics Around Hover
+Assuming small angles ($\phi, \theta, \psi \approx 0$) and $F_{total} \approx mg$:
 - $\ddot{x} \approx g \cdot \theta$
+
 - $\ddot{y} \approx -g \cdot \phi$
-- $\ddot{z} \approx \frac{dF}{m}$
-- $\ddot{\phi}, \ddot{\theta}, \ddot{\psi}$ are governed by $\frac{\tau}{I}$ ratios.
+
+- $\ddot{z} \approx \frac{F_{total}}{m} - g$
+
+- $\ddot{\phi} \approx \frac{\tau_{roll}}{I_{xx}}$
+
+- $\ddot{\theta} \approx \frac{\tau_{pitch}}{I_{yy}}$
+
+- $\ddot{\psi} \approx \frac{\tau_{yaw}}{I_{zz}}$
+---
+
+## 3. Drone Configuration & Parameters
+
+The quadrotor follows an **X-configuration** with a standard **ENU (East-North-Up)** axis convention for the world frame.
+
+### A. Coordinate System & Axis Layout
+- **X-axis (Front)**: Directed towards the front of the drone (between Motor 0 and 2).
+- **Y-axis (Left)**: Directed towards the left of the drone (between Motor 1 and 2).
+- **Z-axis (Up)**: Directed upwards, perpendicular to the motor plane.
+- **Roll ($\phi$)**: Rotation about the X-axis.
+- **Pitch ($\theta$)**: Rotation about the Y-axis.
+- **Yaw ($\psi$)**: Rotation about the Z-axis.
+
+### B. Motor Layout
+
+![alt text](images/rotor.png)
+
+![alt text](images/length.png)
+
+| Motor ID | Position | Rotation | Lever Arm ($L_x, L_y$) |
+| :--- | :--- | :--- | :--- |
+| **0** | Front-Right | CCW (+) | $0.13, -0.22$ |
+| **1** | Rear-Left | CCW (+) | $-0.13, 0.20$ |
+| **2** | Front-Left | CW (-) | $0.13, 0.22$ |
+| **3** | Rear-Right | CW (-) | $-0.13, -0.20$ |
+
+### C. Physical Parameters
+The following values are used for dynamic modeling and control law computation from `robot_params.xacro` and `quadrotor_base.xacro`:
+
+| Parameter | Symbol | Value | Units |
+| :--- | :--- | :--- | :--- |
+| Total Mass | $m$ | 1.525 | $kg$ |
+| Gravity | $g$ | 9.81 | $m/s^2$ |
+| Thrust Coefficient | $k_F$ | $8.54858 \times 10^{-6}$ | $N/(rad/s)^2$ |
+| Torque Coefficient | $k_M$ | 0.06 | $N·m / N$ |
+| Max Motor Speed | $\omega_{max}$ | 1500 | $rad/s$ |
+| Roll Inertia | $I_{xx}$ | 0.0356547 | $kg·m^2$ |
+| Pitch Inertia | $I_{yy}$ | 0.0705152 | $kg·m^2$ |
+| Yaw Inertia | $I_{zz}$ | 0.0990924 | $kg·m^2$ |
 
 ---
 
-## 3. Moment of Inertia Calculation
+### **Moment of Inertia Calculation**
 
 Accurate physics modeling is crucial. The moments of inertia ($I_{xx}, I_{yy}, I_{zz}$) include the base link and the four rotors using the **Parallel Axis Theorem**:
 $$I_{total} = I_{base} + \sum_{i=1}^{4} (I_{rotor, i} + m_{rotor} \cdot d_i^2)$$
@@ -48,7 +96,23 @@ $$I_{total} = I_{base} + \sum_{i=1}^{4} (I_{rotor, i} + m_{rotor} \cdot d_i^2)$$
 
 ---
 
-## 4. Control Strategies
+## 4. Motor Mixing
+
+Control efforts $[F, \tau_r, \tau_p, \tau_y]$ are converted to motor speeds $\omega_i^2$ via the allocation matrix $\Gamma$:
+$$
+\begin{bmatrix} F \\ \tau_r \\ \tau_p \\ \tau_y \end{bmatrix} = \begin{bmatrix} 
+k_F & k_F & k_F & k_F \\
+-k_F \cdot L_{y_{front}} & k_F \cdot L_{y_{rear}} & k_F \cdot L_{y_{front}} & -k_F \cdot L_{y_{rear}} \\
+-k_F \cdot L_x & k_F \cdot L_x & -k_F \cdot L_x & k_F \cdot L_x \\
+-k_F \cdot k_M & -k_F \cdot k_M & k_F \cdot k_M & k_F \cdot k_M 
+\end{bmatrix} 
+\begin{bmatrix} \omega_0^2 \\ \omega_1^2 \\ \omega_2^2 \\ \omega_3^2 \end{bmatrix}
+$$
+*Note: $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.*
+
+---
+
+## 5. Control Strategies
 
 ### A. Linear Quadratic Regulator (LQR)
 LQR is an optimal control method that minimizes a cost function $J$ to find the optimal gain matrix $K$. In this project, it is used for precise hover and position hold.
@@ -100,79 +164,12 @@ The LQR controller in `LQR.py` is implemented through the following systematic s
 6.  **Apply Control Law**: Compute the control correction $\mathbf{u}_{corr} = K \cdot (\mathbf{x}_{ref} - \mathbf{x}_{current})$ and add it to the hover trim $\mathbf{u}_{hover}$.
 7.  **Motor Mixing**: Map the control inputs $[F, \tau_r, \tau_p, \tau_y]$ to individual motor speeds using $\Gamma^{-1}$.
 
-### B. Integral-LQR (LQI)
-LQI augments the system to 16 states. By integrating the position error, it provides the "muscle" to push back against constant wind without an offset:
-$$ \mathbf{x}_{aug} = [\mathbf{x}_{12}, \int e_x, \int e_y, \int e_z, \int e_\psi]^T $$
-
-### C. Model Predictive Control (MPC)
+### B. Model Predictive Control (MPC)
 The MPC node solves a constrained optimization problem at every time step ($DT=0.05s$):
 $$\min_{U} \sum_{k=0}^{N-1} (\mathbf{x}_k^T Q \mathbf{x}_k + \mathbf{u}_k^T R \mathbf{u}_k) + \mathbf{x}_N^T Q_N \mathbf{x}_N$$
 *   **Horizon ($N=20$)**: Looks 1.0s into the future.
 *   **Constraints**: Motor speeds are clipped within $[0, 1500]$ rad/s.
 *   **Solver**: Uses `scipy.optimize.minimize` (L-BFGS-B) with Hessian normalization for numerical stability.
-
----
-
-## 5. Motor Mixing (Allocation Matrix)
-
-Control efforts $[F, \tau_r, \tau_p, \tau_y]$ are converted to motor speeds $\omega_i^2$ via the allocation matrix $\Gamma$:
-$$
-\begin{bmatrix} F \\ \tau_r \\ \tau_p \\ \tau_y \end{bmatrix} = \begin{bmatrix} 
-k_F & k_F & k_F & k_F \\
--k_F \cdot L_y & k_F \cdot L_y & k_F \cdot L_y & -k_F \cdot L_y \\
--k_F \cdot L_x & k_F \cdot L_x & -k_F \cdot L_x & k_F \cdot L_x \\
--k_F \cdot k_M & -k_F \cdot k_M & k_F \cdot k_M & k_F \cdot k_M 
-\end{bmatrix} 
-\begin{bmatrix} \omega_0^2 \\ \omega_1^2 \\ \omega_2^2 \\ \omega_3^2 \end{bmatrix}
-$$
-*Note: $L_x=0.13, L_y=0.22$ based on URDF geometry.*
-
----
-
-## 6. Drone Configuration & Parameters
-
-The quadrotor follows an **X-configuration** with a standard **ENU (East-North-Up)** axis convention for the world frame.
-
-### A. Coordinate System & Axis Layout
-- **X-axis (Front)**: Directed towards the front of the drone (between Motor 0 and 2).
-- **Y-axis (Left)**: Directed towards the left of the drone (between Motor 1 and 2).
-- **Z-axis (Up)**: Directed upwards, perpendicular to the motor plane.
-- **Roll ($\phi$)**: Rotation about the X-axis.
-- **Pitch ($\theta$)**: Rotation about the Y-axis.
-- **Yaw ($\psi$)**: Rotation about the Z-axis.
-
-### B. Motor Layout (Top View)
-```text
-      Front (+X)
-         ^
-         |
-    (FL) 2   0 (FR)
-      \ / \ /
-       X   X  ---> (+Y) Left
-      / \ / \
-    (RL) 1   3 (RR)
-         |
-```
-| Motor ID | Position | Rotation | Lever Arm ($L_x, L_y$) |
-| :--- | :--- | :--- | :--- |
-| **0** | Front-Right | CCW (+) | $0.13, -0.22$ |
-| **1** | Rear-Left | CCW (+) | $-0.13, 0.20$ |
-| **2** | Front-Left | CW (-) | $0.13, 0.22$ |
-| **3** | Rear-Right | CW (-) | $-0.13, -0.20$ |
-
-### C. Physical Parameters
-The following values are used for dynamic modeling and control law computation:
-
-| Parameter | Symbol | Value | Units |
-| :--- | :--- | :--- | :--- |
-| Total Mass | $m$ | 1.525 | kg |
-| Gravity | $g$ | 9.81 | m/s² |
-| Thrust Coefficient | $k_F$ | $8.54858 \times 10^{-6}$ | N/(rad/s)² |
-| Torque Coefficient | $k_M$ | 0.06 | N·m / N |
-| Max Motor Speed | $\omega_{max}$ | 1500 | rad/s |
-| Roll Inertia | $I_{xx}$ | 0.0356547 | kg·m² |
-| Pitch Inertia | $I_{yy}$ | 0.0705152 | kg·m² |
-| Yaw Inertia | $I_{zz}$ | 0.0990924 | kg·m² |
 
 ---
 
@@ -184,16 +181,13 @@ The `send_trajectory_2.py` utility provides several predefined patterns for test
 
 | Mode | Description | Key Parameters |
 | :--- | :--- | :--- |
-| **HOVER** | Holds a fixed position at a specific altitude. | $z, dwell$ |
-| **VERTICAL** | Linear motion along the Z-axis. | $z_{min}, z_{max}, speed$ |
-| **CIRCLE** | A circular path in the X-Z plane. | $radius, speed$ |
-| **XZ_SQUARE** | A square path in the X-Z plane. | $size, speed$ |
-| **SINE** | A sinusoidal wave along the X-axis in the X-Z plane. | $amp, freq, speed$ |
+| **HOVER** | Holds a fixed position at a specific altitude. | $z$ |
+| **LIN_1D_X** | Linear motion along the X-axis. | $x_{min}, x_{max}, speed$ |
+| **LIN_1D_Z** | Linear motion along the Z-axis. | $z_{min}, z_{max}, speed$ |
+| **LIN_2D** | Linear motion along the X-Z plane. | $point_{start}, point_{end}, speed$ |
+| **SINE** | A sinusoidal wave along the X-axis in the X-Z plane. | $amplitude, frequency, num\_wave, speed$ |
+| **LIN_3D** | A linear point-to-point path in 3D space. | $point_{start}, point_{end}, speed$ |
 | **HELIX** | A 3D helical upward path. | $radius, turns, height, speed$ |
-| **SPIRAL** | An inward-conical spiral path. | $radius_{start}, turns, height, speed$ |
-| **FIG_8** | A complex 3D figure-eight pattern. | $width, height, depth, speed$ |
-| **FIG_8_2D** | A 2D figure-eight pattern in the X-Z plane. | $width, height, speed$ |
-| **LIN_3D** | A linear point-to-point path in 3D space. | $start, target, speed$ |
 
 ### B. Features
 - **Lookahead Path**: Generates $N=20$ future poses (spaced at $DT=0.05s$) for predictive control (MPC).
@@ -228,21 +222,12 @@ We measure the error between the reference trajectory $\mathbf{x}_{ref}(t)$ and 
 
 ---
 
-## 9. How to Run
-
-1.  **Launch Simulation**:
-    ```bash
-    ros2 launch quad_description sim.launch.py controller:=MPC world:=wind.sdf
-    ```
-2.  **Start Trajectory**:
-    ```bash
-    # You can edit the MODE in send_trajectory_2.py main() before running
-    ros2 run quad_description send_trajectory_2.py
-    ```
-
----
-
 ## 10. Results & Summary
 - **LQR**: Stable hover, but drifts slightly in wind.
 - **LQI**: Zero steady-state error in 4 m/s wind.
 - **MPC**: Superior tracking of complex trajectories (like Helix/Fig-8) with minimal lag due to its predictive nature.
+
+## Author
+- 65340500037 Pavaris Asawakijtananont
+- 65340500058 Anuwit Intet
+---

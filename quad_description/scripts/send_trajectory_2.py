@@ -364,7 +364,7 @@ def main(args=None):
     rclpy.init(args=args)
 
     # ── SELECT TRAJECTORY ────────────────────────────────────────────────────
-    MODE       = 'HELIX'
+    MODE       = 'FIG_8'
     SPEED      = 0.75
     ROUND_TRIP = True
     ALIGN_YAW  = False
@@ -372,11 +372,11 @@ def main(args=None):
 
     trajectories = {
         'HOVER':     get_hover_trajectory(z=2.0, dwell=3.0),
-        'VERTICAL':  get_vertical_trajectory(z_min=1.0, z_max=4.0, speed=SPEED, dwell=2.0),
+        'VERTICAL':  get_vertical_trajectory(z_min=2.0, z_max=5.0, speed=SPEED, dwell=2.0),
         'CIRCLE':    get_circle_trajectory(radius=1.5, y=0.0, speed=SPEED, dwell=0.0),
         'XZ_SQUARE': get_plane_trajectory(size=2.0, speed=SPEED, dwell=1.0),
-        'SINE':      get_sine_wave_trajectory(amplitude=0.5, freq=0.1, num_waves=1, speed=SPEED, z_base=2.0),
-        'LIN_3D':    get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 3.0, 3.0), speed=SPEED, dwell=2.0),
+        'SINE':      get_sine_wave_trajectory(amplitude=0.5, freq=0.1, num_waves=2, speed=SPEED, z_base=2.0),
+        'LIN_3D':    get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 2.0), speed=SPEED, dwell=2.0),
         'HELIX':     get_helix_trajectory(radius=1.5, height=2.0, turns=2, speed=SPEED, z_base=2.0, dwell=2.0),
         'SPIRAL':    get_spiral_trajectory(radius_start=2.0, height=2.0, turns=3, speed=SPEED, z_base=2.0, dwell=2.0),
         'FIG_8':     get_figure_eight_3d(width=3.0, height=1.0, depth=1.0, speed=SPEED),

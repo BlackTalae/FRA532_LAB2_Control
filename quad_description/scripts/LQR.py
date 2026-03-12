@@ -51,7 +51,7 @@ from scipy.linalg import solve_continuous_are
 
 import rclpy
 from rclpy.node import Node
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from actuator_msgs.msg import Actuators
 from geometry_msgs.msg import PoseStamped
 
@@ -161,7 +161,7 @@ class QuadrotorLQRNode(Node):
     # ── Default target pose (overridden live by /target_pose) ─────────────────
     DEFAULT_TARGET_X   = 0.0   # m
     DEFAULT_TARGET_Y   = 0.0   # m
-    DEFAULT_TARGET_Z   = 1.0   # m
+    DEFAULT_TARGET_Z   = 2.0   # m
     DEFAULT_TARGET_YAW = 0.0   # rad
 
     def __init__(self):
@@ -241,6 +241,10 @@ class QuadrotorLQRNode(Node):
         self.create_subscription(Odometry,    '/odom',        self._cb_odom,   10)
         self.create_subscription(PoseStamped, '/target_pose', self._cb_target,  10)
         self.cmd_pub = self.create_publisher(Actuators, '/motor_commands', 10)
+        self.path_pub = self.create_publisher(Path, '/lqr/path', 10)
+
+        self.history_path = Path()
+        self.history_path.header.frame_id = 'odom'
 
         # Control loop at 100 Hz
         self.create_timer(0.01, self._cb_control)
@@ -319,6 +323,18 @@ class QuadrotorLQRNode(Node):
             av.x, av.y, av.z,
         ])
         self.state_ready = True
+
+        # ── Update path history for Rviz ──────────────────────────────────────
+        node_pose = PoseStamped()
+        node_pose.header = msg.header
+        node_pose.pose = msg.pose.pose
+        self.history_path.poses.append(node_pose)
+        
+        # Limit history to 1000 points (~10 seconds at 100Hz)
+        if len(self.history_path.poses) > 1000:
+            self.history_path.poses.pop(0)
+            
+        self.path_pub.publish(self.history_path)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Target pose callback

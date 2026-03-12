@@ -143,7 +143,7 @@ def generate_launch_description():
     launch_description = LaunchDescription()
 
     # Add launch actions
-    # launch_description.add_action(rviz)
+    launch_description.add_action(rviz)
     launch_description.add_action(world_arg)
     launch_description.add_action(gz_sim)
     launch_description.add_action(rsp) 
