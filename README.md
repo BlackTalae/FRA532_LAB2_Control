@@ -109,17 +109,27 @@ F \\
 \tau_r \\ 
 \tau_p \\ 
 \tau_y 
-\end{bmatrix} = \begin{bmatrix} 
-k_F & k_F & k_F & k_F \\
--k_F \cdot L_{y_{front}} & k_F \cdot L_{y_{rear}} & k_F \cdot L_{y_{front}} & -k_F \cdot L_{y_{rear}} \\
--k_F \cdot L_x & k_F \cdot L_x & -k_F \cdot L_x & k_F \cdot L_x \\
--k_F \cdot k_M & -k_F \cdot k_M & k_F \cdot k_M & k_F \cdot k_M 
-\end{bmatrix} 
+\end{bmatrix} = 
+% \begin{bmatrix} 
+% k_F & k_F & k_F & k_F \\
+% -k_F \cdot L_{y_{front}} & k_F \cdot L_{y_{rear}} & k_F \cdot L_{y_{front}} & -k_F \cdot L_{y_{rear}} \\
+% -k_F \cdot L_x & k_F \cdot L_x & -k_F \cdot L_x & k_F \cdot L_x \\
+% -k_F \cdot k_M & -k_F \cdot k_M & k_F \cdot k_M & k_F \cdot k_M 
+% \end{bmatrix} 
 \begin{bmatrix} \omega_0^2 \\ 
 \omega_1^2 \\ 
 \omega_2^2 \\ 
 \omega_3^2 \end{bmatrix}$$
 
+$$
+\begin{bmatrix}
+B & 0 & 0 & \cdots & 0 \\
+AB & B & 0 & \cdots & 0 \\
+A^2B & AB & B & \cdots & 0 \\
+\vdots & \vdots & \vdots & \ddots & \vdots \\
+A^{N-1}B & A^{N-2}B & A^{N-3}B & \cdots & B
+\end{bmatrix}
+$$
 *Note: $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.*
 
 
