@@ -639,17 +639,17 @@ $$N_p = N_c = 20$$
 > Note : our MPC is constrain only the dynamic model and the output limit
 
 The physical constrain is
-$$
-\bm{U}_{min} = \begin{bmatrix}
+
+$$U_{min} = 
+\begin{bmatrix}
 0 \\
 -5 \\
 -5 \\
 -3 \\
-\end{bmatrix}
-$$
+\end{bmatrix}$$
 
 $$
-\bm{U}_{max} = \begin{bmatrix}
+U_{max} = \begin{bmatrix}
 4mg \\
 5 \\
 5 \\
@@ -671,7 +671,7 @@ $$
 We need to optimize $\Delta u$ so we can get new boundary as
 
 $$
-U_{min} - u_{hover} \le \Delta u \ge U_{min} - u_{hover}
+U_{min} - u_{hover} \le \Delta u \le U_{min} - u_{hover}
 $$
 
 ## 6. Test Trajectories
