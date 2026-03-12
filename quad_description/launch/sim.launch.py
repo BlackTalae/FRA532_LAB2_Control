@@ -12,7 +12,6 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.event_handlers import OnProcessExit
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import TimerAction
 
 from launch_ros.actions import Node
 import xacro
@@ -25,7 +24,7 @@ def generate_launch_description():
 
     spawn_x_val = "0.0"
     spawn_y_val = "0.0"
-    spawn_z_val = "2.0"
+    spawn_z_val = "2.0" # "10.0" #
 
     # Paths
     rviz_file_path = os.path.join(get_package_share_directory(package_name), "rviz", rviz_file_name)
@@ -34,8 +33,8 @@ def generate_launch_description():
     default_world = os.path.join(
         get_package_share_directory(package_name),
         'worlds',
-        # 'empty.sdf'
-        'wind.sdf'
+        'empty.sdf'
+        # 'wind.sdf'
         )    
 
     world = LaunchConfiguration('world')
@@ -86,8 +85,7 @@ def generate_launch_description():
             '--ros-args',
             '-p',
             f'config_file:={bridge_params}',
-        ],
-        parameters=[{'use_sim_time': True}],
+        ]
     )
 
     # Start RViz
@@ -95,63 +93,19 @@ def generate_launch_description():
         package="rviz2",
         executable="rviz2",
         arguments=["-d", rviz_file_path],
-        output="screen",
-        parameters=[{'use_sim_time': True}],
+        output="screen"
     )
-
-    pid = Node(
-        package="quad_description",
-        executable="PID_ken.py",
-        output="screen",
-        parameters=[{'use_sim_time': True}],
-    )
-
-    lqr = Node(
-        package="quad_description",
-        executable="LQR.py",
-        output="screen",
-        parameters=[{'use_sim_time': True}],
-    )
-
-    mpc = Node(
-        package="quad_description",
-        executable="MPC.py",
-        output="screen",
-        parameters=[{'use_sim_time': True}],
-    )
-
-    trajectory = TimerAction(
-        period=0.0,
-        actions=[
-            Node(
-                package="quad_description",
-                executable="send_trajectory_2.py",
-                output="screen",
-                parameters=[{'use_sim_time': True}],
-            )
-        ]
-    )
-
-    # trajectory = Node(
-    #     package="quad_description",
-    #     executable="send_trajectory.py",
-    #     output="screen",
-    #     parameters=[{'use_sim_time': True}],
-    # )
 
     # Create LaunchDescription
     launch_description = LaunchDescription()
 
     # Add launch actions
-    launch_description.add_action(rviz)
+    # launch_description.add_action(rviz)
     launch_description.add_action(world_arg)
     launch_description.add_action(gz_sim)
     launch_description.add_action(rsp) 
     launch_description.add_action(spawn_entity)
     launch_description.add_action(bridge)
-    # launch_description.add_action(pid)   # ← PID controller
-    launch_description.add_action(lqr)   # ← LQR controller
-    # launch_description.add_action(mpc)     # ← MPC controller
-    launch_description.add_action(trajectory)  # ← Trajectory / goal sender
+
 
     return launch_description

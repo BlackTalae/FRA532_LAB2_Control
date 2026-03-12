@@ -51,9 +51,11 @@ from scipy.linalg import solve_continuous_are
 
 import rclpy
 from rclpy.node import Node
-from nav_msgs.msg import Odometry, Path
+from nav_msgs.msg import Odometry
 from actuator_msgs.msg import Actuators
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Float64MultiArray
+from std_srvs.srv import Trigger
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -155,6 +157,9 @@ class QuadrotorLQRNode(Node):
     IYY  = 0.0705152            # kg·m²
     IZZ  = 0.0990924            # kg·m²
 
+    U_MIN = np.array([0.0, -5.0, -5.0, -3.0])
+    U_MAX = np.array([4.0 * MASS * GRAVITY, 5.0, 5.0, 3.0])
+
     # Arm length (distance from CoM to rotor along body x/y axis)
     L = 0.22                    # m
 
@@ -163,6 +168,8 @@ class QuadrotorLQRNode(Node):
     DEFAULT_TARGET_Y   = 0.0   # m
     DEFAULT_TARGET_Z   = 2.0   # m
     DEFAULT_TARGET_YAW = 0.0   # rad
+    START_DELAY = 8.0
+    START_REQ_PERIOD = 0.25
 
     def __init__(self):
         super().__init__('quadrotor_lqr_node')
@@ -208,17 +215,28 @@ class QuadrotorLQRNode(Node):
         #   Q(y/ẏ) 300/60 : authority to hold position vs wind
         #   Q(z)   600    : softened to prevent altitude bounce
         #   R(τ)   5.0    : HEAVILY penalise torque usage (stops jitter)
+        
+        # Tae
+        # Q = np.diag([
+        #     120.0,  300.0,  600.0,   # position  x, y↑, z↓
+        #     10.0,   10.0,   2000.0,  # attitude  φ, θ, ψ
+        #     10.0,   60.0,   50.0,    # velocity  ẋ, ẏ↑, ż
+        #     5.0,    5.0,    10.0,    # ang-rate  φ̇, θ̇, ψ̇
+        # ])
+
+        # Ken
         Q = np.diag([
-            120.0,  300.0,  600.0,   # position  x, y↑, z↓
-            10.0,   10.0,   2000.0,  # attitude  φ, θ, ψ
-            10.0,   60.0,   50.0,    # velocity  ẋ, ẏ↑, ż
-            5.0,    5.0,    10.0,    # ang-rate  φ̇, θ̇, ψ̇
+            400.0,  400.0,  80.0,   # position  x, y↑, z↓
+            60.0,   60.0,   15.0,  # attitude  φ, θ, ψ
+            45.0,   40.0,   30.0,    # velocity  ẋ, ẏ↑, ż
+            5.0,    5.0,    4.0,    # ang-rate  φ̇, θ̇, ψ̇
         ])
+        
         #   Input: [F_total, τ_roll, τ_pitch, τ_yaw]
         R = np.diag([
-            1.0,    # F
-            5.0,    # τ_roll  (Smoothed)
-            5.0,    # τ_pitch (Smoothed)
+            0.1,    # F
+            3.0,    # τ_roll  (Smoothed)
+            3.0,    # τ_pitch (Smoothed)
             5.0,    # τ_yaw   (Smoothed)
         ])
 
@@ -232,6 +250,10 @@ class QuadrotorLQRNode(Node):
         self.TARGET_Z   = self.DEFAULT_TARGET_Z
         self.TARGET_YAW = self.DEFAULT_TARGET_YAW
 
+        self.TARGET_X_   = self.DEFAULT_TARGET_X
+        self.TARGET_Y_   = self.DEFAULT_TARGET_Y
+        self.TARGET_Z_   = self.DEFAULT_TARGET_Z
+
         # ── Drone state  [x, y, z, φ, θ, ψ, ẋ, ẏ, ż, φ̇, θ̇, ψ̇] ─────────────
         #    Same layout as MPC.py: self.state (12,), self.state_ready flag
         self.state       = np.zeros(12)
@@ -241,13 +263,18 @@ class QuadrotorLQRNode(Node):
         self.create_subscription(Odometry,    '/odom',        self._cb_odom,   10)
         self.create_subscription(PoseStamped, '/target_pose', self._cb_target,  10)
         self.cmd_pub = self.create_publisher(Actuators, '/motor_commands', 10)
-        self.path_pub = self.create_publisher(Path, '/lqr/path', 10)
+        self.pub_motors = self.create_publisher(Actuators, '/motor_commands', 10)
+        self.start_cli = self.create_client(Trigger, '/start_trajectory')
+        self.node_start_time = self.get_clock().now().nanoseconds * 1e-9
 
-        self.history_path = Path()
-        self.history_path.header.frame_id = 'odom'
+        self.control_pub = self.create_publisher(Float64MultiArray, '/control_u', 10)
+        self.min_range_pub = self.create_publisher(Float64MultiArray, '/range_min', 10)
+        self.max_range_pub = self.create_publisher(Float64MultiArray, '/range_max', 10)
 
         # Control loop at 100 Hz
         self.create_timer(0.01, self._cb_control)
+        self.start_req_timer = self.create_timer(self.START_REQ_PERIOD, self._cb_start_request_timer)
+        self.start_requested = False
 
         self.get_logger().info(
             f'LQR node ready | listening on /target_pose | '
@@ -324,21 +351,6 @@ class QuadrotorLQRNode(Node):
         ])
         self.state_ready = True
 
-        # ── Update path history for Rviz ──────────────────────────────────────
-        self.history_path.header.stamp    = msg.header.stamp
-        self.history_path.header.frame_id = msg.header.frame_id
-
-        node_pose = PoseStamped()
-        node_pose.header = msg.header
-        node_pose.pose = msg.pose.pose
-        self.history_path.poses.append(node_pose)
-        
-        # Limit history to 1000 points (~10 seconds at 100Hz)
-        if len(self.history_path.poses) > 1000:
-            self.history_path.poses.pop(0)
-            
-        self.path_pub.publish(self.history_path)
-
     # ─────────────────────────────────────────────────────────────────────────
     # Target pose callback
     # ─────────────────────────────────────────────────────────────────────────
@@ -359,6 +371,9 @@ class QuadrotorLQRNode(Node):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _cb_control(self):
+        self.min_range_pub.publish(Float64MultiArray(data=[float(v) for v in self.U_MIN]))
+        self.max_range_pub.publish(Float64MultiArray(data=[float(v) for v in self.U_MAX]))
+
         if not self.state_ready:
             return
 
@@ -382,6 +397,10 @@ class QuadrotorLQRNode(Node):
         vx_body  =  cos_psi * vx_world + sin_psi * vy_world
         vy_body  = -sin_psi * vx_world + cos_psi * vy_world
 
+        v_x_target = (self.TARGET_X - self.TARGET_X_)/ 0.01
+        v_y_target = (self.TARGET_Y - self.TARGET_Y_)/ 0.01
+        v_z_target = (self.TARGET_Z - self.TARGET_Z_)/ 0.01
+
         yaw_err = wrap_angle(self.TARGET_YAW - self.state[5])
         error = np.array([
             ex_body,
@@ -390,13 +409,17 @@ class QuadrotorLQRNode(Node):
             0.0           - self.state[3],
             0.0           - self.state[4],
             yaw_err,
-            0.0 - vx_body,
-            0.0 - vy_body,
-            0.0           - self.state[8],
+            v_x_target - vx_body,
+            v_y_target - vy_body,
+            v_z_target    - self.state[8],
             0.0           - self.state[9],
             0.0           - self.state[10],
             0.0           - self.state[11],
         ])
+
+        self.TARGET_X_ = self.TARGET_X
+        self.TARGET_Y_ = self.TARGET_Y
+        self.TARGET_Z_ = self.TARGET_Z
 
         # ── LQR correction ────────────────────────────────────────────────────
         u_corr    = self.lqr_ctrl.compute(error)   # [dF, dτ_r, dτ_p, dτ_y]
@@ -416,6 +439,8 @@ class QuadrotorLQRNode(Node):
         cmd.velocity = [float(w) for w in omega]
         self.cmd_pub.publish(cmd)
 
+        self.control_pub.publish(Float64MultiArray(data=[float(u) for u in u_opt]))
+
         # ── Diagnostics (~2 Hz) ───────────────────────────────────────────────
         if int(now_sec * 2) % 4 == 0:
             pos  = self.state[:3]
@@ -423,16 +448,43 @@ class QuadrotorLQRNode(Node):
             ref  = np.array([self.TARGET_X, self.TARGET_Y, self.TARGET_Z])
             err  = float(np.linalg.norm(pos - ref))
             du   = u_opt - self.u_hover
-            self.get_logger().info(
-                f'pos=[{pos[0]:+.2f},{pos[1]:+.2f},{pos[2]:+.2f}] '
-                f'ref=[{ref[0]:+.2f},{ref[1]:+.2f},{ref[2]:+.2f}] '
-                f'err={err:.3f}m | '
-                f'rpy=[{rpy[0]:+.1f},{rpy[1]:+.1f},{rpy[2]:+.1f}]deg | '
-                f'dF={du[0]:+.2f}N | '
-                f'omega={np.round(omega).astype(int)} rad/s'
-            )
+            # self.get_logger().info(
+            #     f'pos=[{pos[0]:+.2f},{pos[1]:+.2f},{pos[2]:+.2f}] '
+            #     f'ref=[{ref[0]:+.2f},{ref[1]:+.2f},{ref[2]:+.2f}] '
+            #     f'err={err:.3f}m | '
+            #     f'rpy=[{rpy[0]:+.1f},{rpy[1]:+.1f},{rpy[2]:+.1f}]deg | '
+            #     f'dF={du[0]:+.2f}N | '
+            #     f'omega={np.round(omega).astype(int)} rad/s'
+            # )
 
+    def _cb_start_request_timer(self):
+        """
+        Separate timer for requesting /start_trajectory.
+        This avoids blocking the high-rate MPC control loop.
+        """
 
+        now_sec = self.get_clock().now().nanoseconds * 1e-9
+        startup_elapsed = now_sec - self.node_start_time
+        if self.start_requested:
+            return
+        req = Trigger.Request()
+        self.start_future = self.start_cli.call_async(req)
+        self.start_future.add_done_callback(self._on_start_response)
+        self.start_requested = True
+        self.get_logger().info('Requested /start_trajectory service')
+
+    def _on_start_response(self, future):
+        try:
+            resp = future.result()
+            if resp.success:
+                self.traj_enabled = True
+                self.get_logger().info(f'Trajectory start confirmed: {resp.message}')
+            else:
+                self.start_requested = False
+                self.get_logger().warn(f'Trajectory start rejected: {resp.message}')
+        except Exception as e:
+            self.start_requested = False
+            self.get_logger().error(f'Start trajectory service failed: {e}')
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main(args=None):

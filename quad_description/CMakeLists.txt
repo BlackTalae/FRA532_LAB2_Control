@@ -20,15 +20,17 @@ find_package(ament_cmake REQUIRED)
 
 # Install Python executables
 install(PROGRAMS
-  scripts/PID_ken.py
-  scripts/PID.py
+  # scripts/PID_ken.py
+  # scripts/PID.py
   scripts/LQR.py
-  scripts/LQR_v1.py
+  # scripts/LQR_v1.py
   scripts/LQI.py
   scripts/iLQR.py
-  scripts/MPC.py
-  scripts/send_trajectory.py
-  scripts/send_trajectory_2.py
+  scripts/MPCNode5.py
+  # scripts/send_trajectory.py
+  # scripts/send_trajectory_2.py
+  scripts/send_traject.py
+  scripts/trajectory_visualizer.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
