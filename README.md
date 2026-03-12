@@ -123,16 +123,6 @@ k_F & k_F & k_F & k_F \\
 \omega_3^2 \end{bmatrix}
 $$
 
-$$
-\begin{bmatrix}
-B & 0 & 0 & \cdots & 0 \\
-AB & B & 0 & \cdots & 0 \\
-A^2B & AB & B & \cdots & 0 \\
-\vdots & \vdots & \vdots & \ddots & \vdots \\
-A^{N-1}B & A^{N-2}B & A^{N-3}B & \cdots & B
-\end{bmatrix}
-$$
-
 *Note: $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.*
 
 
@@ -145,7 +135,8 @@ LQR is an optimal control method that minimizes a cost function $J$ to find the 
 #### 1. Linearized State-Space Model
 The system is modeled as $\dot{\mathbf{x}} = A\mathbf{x} + B\mathbf{u}$ linearized around the hover equilibrium ($\phi, \theta \approx 0, F_{total} \approx mg$):
 
-$$\begin{bmatrix} 
+$$
+\begin{bmatrix} 
 \dot{x} \\ \dot{y} \\ \dot{z} \\ \dot{\phi} \\ \dot{\theta} \\ \dot{\psi} \\ \ddot{x} \\ \ddot{y} \\ \ddot{z} \\ \ddot{\phi} \\ \ddot{\theta} \\ \ddot{\psi} 
 \end{bmatrix} = 
 \begin{bmatrix} 
@@ -162,7 +153,6 @@ $$\begin{bmatrix}
 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0
 \end{bmatrix} 
-
 \begin{bmatrix} 
 x \\ 
 y \\ 
@@ -196,7 +186,8 @@ dF \\
 \tau_{roll} \\ 
 \tau_{pitch} \\ 
 \tau_{yaw} 
-\end{bmatrix}$$
+\end{bmatrix}
+$$
 
 *   **State Vector ($\mathbf{x}$)**: $[x, y, z, \phi, \theta, \psi, \dot{x}, \dot{y}, \dot{z}, \dot{\phi}, \dot{\theta}, \dot{\psi}]^T$
 *   **Input Vector ($\mathbf{u}$)**: $[dF, \tau_r, \tau_p, \tau_y]^T$ where $dF = F_{total} - mg$.
