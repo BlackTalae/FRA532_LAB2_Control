@@ -104,22 +104,24 @@ $$I_{total} = I_{base} + \sum_{i=1}^{4} (I_{rotor, i} + m_{rotor} \cdot d_i^2)$$
 
 Control efforts $[F, \tau_r, \tau_p, \tau_y]$ are converted to motor speeds $\omega_i^2$ via the allocation matrix $\Gamma$:
 
-$$\begin{bmatrix} 
+$$
+\begin{bmatrix} 
 F \\ 
 \tau_r \\ 
 \tau_p \\ 
 \tau_y 
 \end{bmatrix} = 
-% \begin{bmatrix} 
-% k_F & k_F & k_F & k_F \\
-% -k_F \cdot L_{y_{front}} & k_F \cdot L_{y_{rear}} & k_F \cdot L_{y_{front}} & -k_F \cdot L_{y_{rear}} \\
-% -k_F \cdot L_x & k_F \cdot L_x & -k_F \cdot L_x & k_F \cdot L_x \\
-% -k_F \cdot k_M & -k_F \cdot k_M & k_F \cdot k_M & k_F \cdot k_M 
-% \end{bmatrix} 
+\begin{bmatrix} 
+k_F & k_F & k_F & k_F \\
+-k_F \cdot L_{y_{front}} & k_F \cdot L_{y_{rear}} & k_F \cdot L_{y_{front}} & -k_F \cdot L_{y_{rear}} \\
+-k_F \cdot L_x & k_F \cdot L_x & -k_F \cdot L_x & k_F \cdot L_x \\
+-k_F \cdot k_M & -k_F \cdot k_M & k_F \cdot k_M & k_F \cdot k_M 
+\end{bmatrix} 
 \begin{bmatrix} \omega_0^2 \\ 
 \omega_1^2 \\ 
 \omega_2^2 \\ 
-\omega_3^2 \end{bmatrix}$$
+\omega_3^2 \end{bmatrix}
+$$
 
 $$
 \begin{bmatrix}
@@ -130,6 +132,7 @@ A^2B & AB & B & \cdots & 0 \\
 A^{N-1}B & A^{N-2}B & A^{N-3}B & \cdots & B
 \end{bmatrix}
 $$
+
 *Note: $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.*
 
 
