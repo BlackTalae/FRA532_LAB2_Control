@@ -103,6 +103,7 @@ $$I_{total} = I_{base} + \sum_{i=1}^{4} (I_{rotor, i} + m_{rotor} \cdot d_i^2)$$
 ## 4. Motor Mixing
 
 Control efforts $[F, \tau_r, \tau_p, \tau_y]$ are converted to motor speeds $\omega_i^2$ via the allocation matrix $\Gamma$:
+
 $$\begin{bmatrix} 
 F \\ 
 \tau_r \\ 
@@ -118,6 +119,7 @@ k_F & k_F & k_F & k_F \\
 \omega_1^2 \\ 
 \omega_2^2 \\ 
 \omega_3^2 \end{bmatrix}$$
+
 *Note: $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.*
 
 
