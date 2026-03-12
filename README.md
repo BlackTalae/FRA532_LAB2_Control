@@ -226,7 +226,7 @@ The LQR controller in `LQR.py` is implemented through the following systematic s
 4.  **Solve Algebraic Riccati Equation (ARE)**: Compute the unique positive-definite matrix $P$ using `scipy.linalg.solve_continuous_are`:
     $$A^T P + PA - PBR^{-1}B^T P + Q = 0$$
 5.  **Compute Optimal Gain ($K$)**: Calculate the gain matrix as $K = R^{-1} B^T P$.
-6.  **Apply Control Law**: Compute the control correction $\mathbf{u}_{corr} = K \cdot (\mathbf{x_{ref}} - \mathbf{x_{current}})$ and add it to the hover trim $\mathbf{u_{hover}}$.
+6.  **Apply Control Law**: Compute the control correction $\mathbf{u}_{corr} = K\cdot(\mathbf{x}_{ref} - \mathbf{x}_{current})$ and add it to the hover trim $\mathbf{u}_{hover}$.
 7.  **Motor Mixing**: Map the control inputs $[F, \tau_r, \tau_p, \tau_y]$ to individual motor speeds using $\Gamma^{-1}$.
 
 ### B. Model Predictive Control (MPC)
@@ -557,15 +557,15 @@ MPC works by predicting future system behavior using a model, optimizing a seque
 </p>
 
 **Prediction Horizon**
-- The prediction horizon ​$N_{p}$  efines the number of future time steps over which the system states are predicted using the model
-- The model simulates the future system behavior over ​$N_p$ steps assuming a sequence of future control inputs.
+- The prediction horizon $N_p$  efines the number of future time steps over which the system states are predicted using the model
+- The model simulates the future system behavior over $N_p$ steps assuming a sequence of future control inputs.
 
 $$x_{k+1}, x_{k+2} , x_{k+3} , \dots, x_{k+N_{p}}$$
 
 The optimizer minimizes a cost function defined over these predicted states.
 
 **Control Horizon**
-- The control horizon ​$N_{c}$ defines the number of independent control inputs optimized by the controller.
+- The control horizon $N_c$ defines the number of independent control inputs optimized by the controller.
 
 $$N_{c} \le N_{p}$$
 
@@ -597,8 +597,8 @@ The performance of the MPC is heavily influenced by the weight matrices:
 2. **Prediction Matrix Construction**: Build the stacked matrices $\mathcal{A}$ and $\mathcal{B}$ that map the current state and future controls to the predicted state trajectory.
 3. **QP Matrix Formulation**: Formulate the quadratic cost $J = U^T H U + 2 F^T U$ by calculating the Hessian $H$ and linear term $F$ offline/online.
 4. **Reference Building**: Extract $N$ future states from the `/reference_path` topic.
-5. **Optimization**: Solve the constrained QP problem at **20 Hz** using the L-BFGS-B algorithm.
-6. **Actuation**: Apply the first control chunk $u_0$ and repeat.
+<!-- 5. **Optimization**: Solve the constrained QP problem at **20 Hz** using the L-BFGS-B algorithm. -->
+5. **Actuation**: Apply the first control chunk $u_0$ and repeat.
 
 ## 6. Test Trajectories
 
