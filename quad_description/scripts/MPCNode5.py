@@ -87,45 +87,15 @@ class MPCController(Node):
     DT = 0.01
     N = 20
 
-    # Good for Normal
-    # Q_DIAG = np.array([
-    #     75., 75., 30.,
-    #     8.,  8.,  0.5,
-    #     30., 30., 3.0,
-    #     2.,  2.,  0.5
-    # ])
-    # QN_SCALE = 1.0
-    # R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
-    
-    # Also work for normal!
-    # Q_DIAG = np.array([
-    #     225., 225., 150.,
-    #     45.,  30.,  1.5,
-    #     90., 90., 10.0,
-    #     10.,  6.,  1.5
-    # ])
-    # QN_SCALE = 1.0
-    # R_DIAG = np.array([0.1, 3.5, 1.0, 3.5])
-
     # Cooked!!!
-    # Q_DIAG = np.array([
-    #     400., 600., 30.,
-    #     25.,  25.,  0.5,
-    #     12., 12., 3.0,
-    #     2.,  2.,  0.5
-    # ])
-    # QN_SCALE = 1.0
-    # R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
-
-    
-    # Q_DIAG = np.array([
-    #     450., 675., 36.,
-    #     60.,  50.,  5.5,
-    #     11., 10., 3.5,
-    #     2.,  2.,  1.5
-    # ])
-    # QN_SCALE = 1.0
-    # R_DIAG = np.array([0.01, 1.19, 1.0, 2.0])
+    Q_DIAG = np.array([
+        550., 550., 36.,
+        75.,  55.,  5.5,
+        30., 30., 3.5,
+        2.,  2.,  1.5
+        ])
+    QN_SCALE = 0.0
+    R_DIAG = np.array([0.01, 1.0, 1.0, 2.0])
 
     # Q_DIAG = np.array([
     #     600., 630., 36.,
@@ -133,17 +103,9 @@ class MPCController(Node):
     #     11., 10., 3.5,
     #     2.,  2.,  1.5
     # ])
-    # QN_SCALE = 1.0
+    # QN_SCALE = 0.0
     # R_DIAG = np.array([0.01, 1.19, 1.0, 2.0])
 
-    Q_DIAG = np.array([
-        325., 325., 60.,
-        50.,  50.,  5.5,
-        2., 2., 3.0,
-        2.,  2.,  1.0
-    ])
-    QN_SCALE = 1.0
-    R_DIAG = np.array([0.01, 1.0, 1.0, 1.5])
 
     U_MIN = np.array([0.0, -5.0, -5.0, -3.0])
     U_MAX = np.array([4.0 * MASS * GRAVITY, 5.0, 5.0, 3.0])
@@ -490,10 +452,16 @@ class MPCController(Node):
         for k in range(N):
             x0, y0, z0, yaw0 = get_pose(k)
             x1, y1, z1, yaw1 = get_pose(k + 1)
+            xp, yp, zp, yawp = get_pose(k - 1)
 
             vx = (x1 - x0) / dt
             vy = (y1 - y0) / dt
             vz = (z1 - z0) / dt
+
+            # vx = (x0 - xp) / dt
+            # vy = (y0 - yp) / dt
+            # vz = (z0 - zp) / dt
+
             yawdot = wrap_angle(yaw1 - yaw0) / dt
             yaw = 0
             yawdot = 0

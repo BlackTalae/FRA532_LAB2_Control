@@ -74,7 +74,7 @@ class TrajectoryVisualizer(Node):
         self.declare_parameter('u_min', 0.0)
         self.declare_parameter('u_max', 1500.0)
 
-        self.declare_parameter('auto_save', False)
+        self.declare_parameter('auto_save', True)
         self.declare_parameter('save_dir', 'trajectory_results')
 
         self.auto_save = bool(self.get_parameter('auto_save').value)
@@ -405,7 +405,7 @@ def main(args=None):
 
 
     if node.robustness_mode:
-        fig_an, axes_an = an.build_robustness()
+        fig_an, axes_an, info_an = an.build_robustness()
         artists_an = None; info_an = None
     else:
         fig_an, artists_an, info_an = an.build_normal()
@@ -425,7 +425,7 @@ def main(args=None):
         try:
             if node.robustness_mode:
                 if d['laps']:
-                    an.update_robustness(axes_an, d['laps'])
+                    an.update_robustness(axes_an, d['laps'], info_an)
                     fig_an.canvas.draw_idle()
             else:
                 an.update_normal(d, artists_an, info_an)

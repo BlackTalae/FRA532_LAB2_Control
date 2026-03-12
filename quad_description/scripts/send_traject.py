@@ -406,7 +406,7 @@ def main(args=None):
     END_DWELL = 3.0   # hold only at the very end, not at the start
 
     trajectories = {
-        'HOVER':    get_hover_trajectory(z=2.0, hold_s=3.0, hz=TrajectoryNode.PUBLISH_HZ),
+        'HOVER':    get_hover_trajectory(z=2.0, hold_s=5.0, hz=TrajectoryNode.PUBLISH_HZ),
         'VERTICAL': get_vertical_trajectory(z_min=2.0, z_max=5.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'CIRCLE':   get_circle_trajectory(radius=1.5, y=0.0, z_base=2.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'XZ_SQUARE': get_plane_trajectory(size=2.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
