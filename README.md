@@ -1,7 +1,11 @@
 # Quadrotor Control Project: Optimal & Predictive Control
 
-This project explores the design and implementation of advanced control strategies for a quadrotor in Gazebo simulation environment. It covers **Linear Quadratic Regulator (LQR)** and **Model Predictive Control (MPC)**.
+## Author
+- 65340500037 Pavaris Asawakijtananont
+- 65340500058 Anuwit Intet
+---
 
+This project explores the design and implementation of advanced control strategies for a quadrotor in Gazebo simulation environment. It covers **Linear Quadratic Regulator (LQR)** and **Model Predictive Control (MPC)**.
 
 ## 1. System Architecture
 The system architecture follows a closed-loop control paradigm integrated with the Gazebo simulation environment. It consists of a high-level controller (LQR or MPC) that processes the error between a reference trajectory and the current state feedback to compute optimal control commands.
@@ -627,7 +631,7 @@ We measure the error between the reference trajectory $\mathbf{x}_{ref}(t)$ and 
 - **Peak Error ($e_{max}$)**: Maximum deviation from the path, critical for obstacle avoidance.
   $$e_{max} = \max |e(t)|$$
 
-### B. Visualization Strategies
+### B. Visualization
 - **State-over-Time**: Individual plots for $X, Y, Z$ to identify which axes are most susceptible to disturbances.
 - **Control Input Monitoring**: Visualization of $F_{total}$ and $\tau$ to ensure the controller is not saturating the motors or causing high-frequency jitter (over-tuning).
 - **Cumulative Error**: The total accumulated error over the entire trajectory duration, reflecting the overall tracking performance.
@@ -636,9 +640,50 @@ We measure the error between the reference trajectory $\mathbf{x}_{ref}(t)$ and 
 
 ## 8. Results & Summary
 
-Soon
-![alt text](prokaryote.png)
-## Author
-- 65340500037 Pavaris Asawakijtananont
-- 65340500058 Anuwit Intet
----
+### No wind
+
+![alt text](images/prokaryote2.png)
+
+**LQR Cumurative Error**
+
+![alt text](images/image.png)
+
+**MPC Cumurative Error**
+
+![alt text](images/image-1.png)
+
+**With wind -4 m/s along Y-axis**
+
+![alt text](images/prokaryote3.png)
+
+**LQR Cumurative Error**
+
+![alt text](images/image-2.png)
+
+**MPC Cumurative Error**
+
+![alt text](images/image-3.png)
+
+### Analysis
+**Axis Error - No wind condition**
+- ``Z-Axis``
+  - Although LQR controller has better overall performance  for tracking the trajectory 
+    - But, It can be observed that Z-axis error of MPC is significantly lower than LQR in normal condition
+    - It depending on parameter tuning for Q , R 
+- ``X & Y-Axis``
+  - Despite, MPC can tracking the trajectory is X,Y Axis but still has higher tracking error compared to the LQR controller
+
+![alt text](images/image-4.png)
+
+**Axis Error - With wind condition**
+- ``Hover``
+  - In wind condition, both controller can hover at the fixed Z-position
+  - But with the wind disturbance both controller cannot back to the hover position in x and y axis (0.0, 0.0)  
+
+![alt text](images/image-5.png)
+
+- ``X & Y-Axis``
+  - In wind condition, higher error in x,y axis can be seen for both controller, these disturbane bring more steady state error to controller
+  - Disturbance effect to MPC in X-axis the most, it has very high error, while LQR has slightly effect.
+
+![alt text](images/image-6.png)
