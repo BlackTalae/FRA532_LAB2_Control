@@ -226,7 +226,7 @@ The LQR controller in `LQR.py` is implemented through the following systematic s
 4.  **Solve Algebraic Riccati Equation (ARE)**: Compute the unique positive-definite matrix $P$ using `scipy.linalg.solve_continuous_are`:
     $$A^T P + PA - PBR^{-1}B^T P + Q = 0$$
 5.  **Compute Optimal Gain ($K$)**: Calculate the gain matrix as $K = R^{-1} B^T P$.
-6.  **Apply Control Law**: Compute the control correction $\mathbf{u}_{corr} = K\cdot(\mathbf{x}_{ref} - \mathbf{x}_{current})$ and add it to the hover trim $\mathbf{u}_{hover}$.
+6.  **Apply Control Law**: Compute the control correction $u_{corr} = K \cdot (x_{ref} - x_{current})$ and add it to the hover trim $u_{hover}$.
 7.  **Motor Mixing**: Map the control inputs $[F, \tau_r, \tau_p, \tau_y]$ to individual motor speeds using $\Gamma^{-1}$.
 
 ### B. Model Predictive Control (MPC)
