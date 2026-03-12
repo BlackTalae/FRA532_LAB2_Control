@@ -104,13 +104,21 @@ $$I_{total} = I_{base} + \sum_{i=1}^{4} (I_{rotor, i} + m_{rotor} \cdot d_i^2)$$
 
 Control efforts $[F, \tau_r, \tau_p, \tau_y]$ are converted to motor speeds $\omega_i^2$ via the allocation matrix $\Gamma$:
 $$
-\begin{bmatrix} F \\ \tau_r \\ \tau_p \\ \tau_y \end{bmatrix} = \begin{bmatrix} 
+\begin{bmatrix} 
+F \\ 
+\tau_r \\ 
+\tau_p \\ 
+\tau_y 
+\end{bmatrix} = \begin{bmatrix} 
 k_F & k_F & k_F & k_F \\
 -k_F \cdot L_{y_{front}} & k_F \cdot L_{y_{rear}} & k_F \cdot L_{y_{front}} & -k_F \cdot L_{y_{rear}} \\
 -k_F \cdot L_x & k_F \cdot L_x & -k_F \cdot L_x & k_F \cdot L_x \\
 -k_F \cdot k_M & -k_F \cdot k_M & k_F \cdot k_M & k_F \cdot k_M 
 \end{bmatrix} 
-\begin{bmatrix} \omega_0^2 \\ \omega_1^2 \\ \omega_2^2 \\ \omega_3^2 \end{bmatrix}
+\begin{bmatrix} \omega_0^2 \\ 
+\omega_1^2 \\ 
+\omega_2^2 \\ 
+\omega_3^2 \end{bmatrix}
 $$
 *Note: $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.*
 
@@ -142,8 +150,20 @@ $$
 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0
 \end{bmatrix} 
+
 \begin{bmatrix} 
-x \\ y \\ z \\ \phi \\ \theta \\ \psi \\ \dot{x} \\ \dot{y} \\ \dot{z} \\ \dot{\phi} \\ \dot{\theta} \\ \dot{\psi} 
+x \\ 
+y \\ 
+z \\ 
+\phi \\ 
+\theta \\ 
+\psi \\ 
+\dot{x} \\ 
+\dot{y} \\ 
+\dot{z} \\ 
+\dot{\phi} \\ 
+\dot{\theta} \\ 
+\dot{\psi} 
 \end{bmatrix} + 
 \begin{bmatrix} 
 0 & 0 & 0 & 0 \\
@@ -160,7 +180,10 @@ x \\ y \\ z \\ \phi \\ \theta \\ \psi \\ \dot{x} \\ \dot{y} \\ \dot{z} \\ \dot{\
 0 & 0 & 0 & 1/I_{zz}
 \end{bmatrix} 
 \begin{bmatrix} 
-dF \\ \tau_{roll} \\ \tau_{pitch} \\ \tau_{yaw} 
+dF \\ 
+\tau_{roll} \\ 
+\tau_{pitch} \\ 
+\tau_{yaw} 
 \end{bmatrix}
 $$
 
