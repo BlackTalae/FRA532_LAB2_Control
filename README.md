@@ -95,16 +95,15 @@ Accurate physics modeling is crucial. The moments of inertia ($I_{xx}, I_{yy}, I
 $$I_{total} = I_{base} + \sum_{i=1}^{4} (I_{rotor, i} + m_{rotor} \cdot d_i^2)$$
 
 **Final Calculated Values:**
-- $I_{xx} = 0.0356547$ kg·m²
-- $I_{yy} = 0.0705152$ kg·m²
-- $I_{zz} = 0.0990924$ kg·m²
+- $I_{xx} = 0.0356547 kg·m²$
+- $I_{yy} = 0.0705152 kg·m²$
+- $I_{zz} = 0.0990924 kg·m²$
 
 
 ## 4. Motor Mixing
 
 Control efforts $[F, \tau_r, \tau_p, \tau_y]$ are converted to motor speeds $\omega_i^2$ via the allocation matrix $\Gamma$:
-$$
-\begin{bmatrix} 
+$$\begin{bmatrix} 
 F \\ 
 \tau_r \\ 
 \tau_p \\ 
@@ -118,8 +117,7 @@ k_F & k_F & k_F & k_F \\
 \begin{bmatrix} \omega_0^2 \\ 
 \omega_1^2 \\ 
 \omega_2^2 \\ 
-\omega_3^2 \end{bmatrix}
-$$
+\omega_3^2 \end{bmatrix}$$
 *Note: $L_x=0.13, L_{y_{front}}=0.22, L_{y_{rear}}=0.20$ based on URDF geometry.*
 
 
@@ -132,8 +130,7 @@ LQR is an optimal control method that minimizes a cost function $J$ to find the 
 #### 1. Linearized State-Space Model
 The system is modeled as $\dot{\mathbf{x}} = A\mathbf{x} + B\mathbf{u}$ linearized around the hover equilibrium ($\phi, \theta \approx 0, F_{total} \approx mg$):
 
-$$
-\begin{bmatrix} 
+$$\begin{bmatrix} 
 \dot{x} \\ \dot{y} \\ \dot{z} \\ \dot{\phi} \\ \dot{\theta} \\ \dot{\psi} \\ \ddot{x} \\ \ddot{y} \\ \ddot{z} \\ \ddot{\phi} \\ \ddot{\theta} \\ \ddot{\psi} 
 \end{bmatrix} = 
 \begin{bmatrix} 
@@ -184,8 +181,7 @@ dF \\
 \tau_{roll} \\ 
 \tau_{pitch} \\ 
 \tau_{yaw} 
-\end{bmatrix}
-$$
+\end{bmatrix}$$
 
 *   **State Vector ($\mathbf{x}$)**: $[x, y, z, \phi, \theta, \psi, \dot{x}, \dot{y}, \dot{z}, \dot{\phi}, \dot{\theta}, \dot{\psi}]^T$
 *   **Input Vector ($\mathbf{u}$)**: $[dF, \tau_r, \tau_p, \tau_y]^T$ where $dF = F_{total} - mg$.
