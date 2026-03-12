@@ -690,3 +690,26 @@ We measure the error between the reference trajectory $\mathbf{x}_{ref}(t)$ and 
   - Disturbance effect to MPC in X-axis the most, it has very high error, while LQR has slightly effect.
 
 ![alt text](images/image-6.png)
+
+**Robustness**
+
+- Robustness is tested in Helix trajectory, (this trajectory including continuous velocity along trajectory and sharp turn at end of trajectory).
+- Test it 5 Lap per controller in wind condition.
+
+![alt text](images/robust.png)
+
+- Both controller has similar error trend when pass the first lap, despite the error is increasing when finished first lap.
+- LQR has lower cumulative error than MPC, error is with significantly higher in X-axis, MPC has higher.
+
+## 9. Conclusion
+- Optimal controller can produce the control signal base on the dynamic model and solving the equation to minimizing the cost function (Quadratic cost function), our controller (LQR, MPC) both controller are minimizing the cost function with different methods. But rely on same linear model.
+  - LQR : base on Solve Algebraic Riccati Equation and Compute Optimal Gain (Once time!).
+  - MPC : prediction the future through the internal dynamic model and minimizing the cost along the finite horizon period to get optimal control input
+
+- Our LQR is better than MPC, giving less error than MPC in overall tasks, except the tracking position in Z-axis,
+  - Both controllers are required hard parameter tuning to get the robust and  desired behavior
+
+![alt text](images/control.png)
+
+- The figure illustrate that both controller can tracking the trajectory but the controller inputs (F_roll, F_pitch)  are majority difference.
+- With currently parameters, with the cumulative error and robustness LQR controller  is better than the MPC.
