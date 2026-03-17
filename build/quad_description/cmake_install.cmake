@@ -44,8 +44,8 @@ endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/quad_description" TYPE PROGRAM FILES
-    "/home/pavaris/FRA532_LAB2_Control/quad_description/scripts/PID.py"
     "/home/pavaris/FRA532_LAB2_Control/quad_description/scripts/LQR.py"
+    "/home/pavaris/FRA532_LAB2_Control/quad_description/scripts/LQI.py"
     "/home/pavaris/FRA532_LAB2_Control/quad_description/scripts/MPCNode5.py"
     "/home/pavaris/FRA532_LAB2_Control/quad_description/scripts/MPCNode6.py"
     "/home/pavaris/FRA532_LAB2_Control/quad_description/scripts/trajectory_visualizer.py"

@@ -399,7 +399,7 @@ class TrajectoryNode(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    MODE = 'SINE'
+    MODE = 'HELIX'
     SPEED = 0.75
     ROUND_TRIP = True
     ALIGN_YAW = False
@@ -411,23 +411,20 @@ def main(args=None):
         'CIRCLE':   get_circle_trajectory(radius=1.5, y=0.0, z_base=2.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'XZ_SQUARE': get_plane_trajectory(size=2.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'SINE':     get_sine_wave_trajectory(amplitude=0.8, freq=0.075, num_waves=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
-        'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 5.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 3.0, 5.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'HELIX':    get_helix_trajectory(radius=1.75, height=2.0, turns=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
         'SPIRAL':   get_spiral_trajectory(radius_start=2.0, height=2.0, turns=3, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
         'FIG_8':    get_figure_eight_3d(width=3.0, height=1.0, depth=1.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
         'FIG_8_2D': get_figure_eight_2d_trajectory(width=3.0, height=3.0, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
+
+        'a1': get_vertical_trajectory(z_min=2.0, z_max=5.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        'a2':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 2.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        'b1':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 5.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        'b2':     get_sine_wave_trajectory(amplitude=0.8, freq=0.075, num_waves=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
+        'c1':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 3.0, 5.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
+        'c2':    get_helix_trajectory(radius=2.0, height=2.0, turns=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
     }
-        # 1D
-        # 'VERTICAL': get_vertical_trajectory(z_min=2.0, z_max=5.0, speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
-        # 'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 2.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
-        # 'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 5.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
 
-        # 2D
-        # 'SINE':     get_sine_wave_trajectory(amplitude=0.8, freq=0.075, num_waves=1, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
-
-        # 3D
-        # 'LIN_3D':   get_linear_trajectory((0.0, 0.0, 2.0), (3.0, 0.0, 2.0), speed=SPEED, hz=TrajectoryNode.PUBLISH_HZ),
-        # 'HELIX':    get_helix_trajectory(radius=2.0, height=2.0, turns=2, speed=SPEED, z_base=2.0, hz=TrajectoryNode.PUBLISH_HZ),
 
 
     if MODE not in trajectories:

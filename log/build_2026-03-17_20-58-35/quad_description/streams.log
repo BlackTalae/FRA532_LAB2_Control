@@ -1,0 +1,70 @@
+[0.008s] Invoking command in '/home/pavaris/FRA532_LAB2_Control/build/quad_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake /home/pavaris/FRA532_LAB2_Control/quad_description -DCMAKE_INSTALL_PREFIX=/home/pavaris/FRA532_LAB2_Control/install/quad_description
+[0.052s] -- The C compiler identification is GNU 11.4.0
+[0.095s] -- The CXX compiler identification is GNU 11.4.0
+[0.101s] -- Detecting C compiler ABI info
+[0.160s] -- Detecting C compiler ABI info - done
+[0.165s] -- Check for working C compiler: /usr/bin/cc - skipped
+[0.165s] -- Detecting C compile features
+[0.166s] -- Detecting C compile features - done
+[0.168s] -- Detecting CXX compiler ABI info
+[0.242s] -- Detecting CXX compiler ABI info - done
+[0.248s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[0.248s] -- Detecting CXX compile features
+[0.248s] -- Detecting CXX compile features - done
+[0.250s] -- Found ament_cmake: 1.3.12 (/opt/ros/humble/share/ament_cmake/cmake)
+[0.369s] -- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter 
+[0.504s] -- Configuring done
+[0.507s] -- Generating done
+[0.508s] -- Build files have been written to: /home/pavaris/FRA532_LAB2_Control/build/quad_description
+[0.513s] Invoked command in '/home/pavaris/FRA532_LAB2_Control/build/quad_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake /home/pavaris/FRA532_LAB2_Control/quad_description -DCMAKE_INSTALL_PREFIX=/home/pavaris/FRA532_LAB2_Control/install/quad_description
+[0.515s] Invoking command in '/home/pavaris/FRA532_LAB2_Control/build/quad_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /home/pavaris/FRA532_LAB2_Control/build/quad_description -- -j16 -l16
+[0.545s] Invoked command in '/home/pavaris/FRA532_LAB2_Control/build/quad_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /home/pavaris/FRA532_LAB2_Control/build/quad_description -- -j16 -l16
+[0.553s] Invoking command in '/home/pavaris/FRA532_LAB2_Control/build/quad_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /home/pavaris/FRA532_LAB2_Control/build/quad_description
+[0.559s] -- Install configuration: ""
+[0.559s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/LQR.py
+[0.559s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/LQI.py
+[0.559s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/MPCNode5.py
+[0.559s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/MPCNode6.py
+[0.560s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/trajectory_visualizer.py
+[0.560s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/dashboard_realtime.py
+[0.560s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/dashboard_analysis.py
+[0.560s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/send_traject.py
+[0.560s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf
+[0.560s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/gazebo_full.xacro
+[0.560s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/quadrotor_base.xacro
+[0.560s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/urdf/robot_params.xacro
+[0.561s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes
+[0.561s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/ccw.stl
+[0.561s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.dae
+[0.561s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/cw.stl
+[0.562s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.jpg
+[0.562s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch
+[0.562s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/lqi.launch.py
+[0.562s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/sim.launch.py
+[0.562s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/rsp.launch.py
+[0.562s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/mpc.launch.py
+[0.562s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/lqr.launch.py
+[0.562s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gz_bridge.yaml
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/config/gaz_ros2_ctl_use_sim.yaml
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds/wind.sdf
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/worlds/empty.sdf
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/rviz
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/rviz/sim.rviz
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/package_run_dependencies/quad_description
+[0.563s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/parent_prefix_path/quad_description
+[0.564s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/ament_prefix_path.sh
+[0.564s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/ament_prefix_path.dsv
+[0.564s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/path.sh
+[0.564s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/environment/path.dsv
+[0.564s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.bash
+[0.564s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.sh
+[0.564s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.zsh
+[0.564s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/local_setup.dsv
+[0.565s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/package.dsv
+[0.565s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/ament_index/resource_index/packages/quad_description
+[0.565s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/cmake/quad_descriptionConfig.cmake
+[0.565s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/cmake/quad_descriptionConfig-version.cmake
+[0.565s] -- Installing: /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/package.xml
+[0.567s] Invoked command in '/home/pavaris/FRA532_LAB2_Control/build/quad_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /home/pavaris/FRA532_LAB2_Control/build/quad_description

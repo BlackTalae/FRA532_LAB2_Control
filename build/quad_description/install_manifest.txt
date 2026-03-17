@@ -1,5 +1,5 @@
-/home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/PID.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/LQR.py
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/LQI.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/MPCNode5.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/MPCNode6.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/lib/quad_description/trajectory_visualizer.py
@@ -13,6 +13,7 @@
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.dae
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/cw.stl
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/meshes/x3.jpg
+/home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/lqi.launch.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/sim.launch.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/rsp.launch.py
 /home/pavaris/FRA532_LAB2_Control/install/quad_description/share/quad_description/launch/mpc.launch.py

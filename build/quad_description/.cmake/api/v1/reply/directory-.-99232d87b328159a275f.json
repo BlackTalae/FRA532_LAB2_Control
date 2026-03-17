@@ -42,13 +42,13 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 35,
+				"line" : 36,
 				"parent" : 0
 			},
 			{
 				"command" : 5,
 				"file" : 0,
-				"line" : 45,
+				"line" : 46,
 				"parent" : 0
 			},
 			{
@@ -235,8 +235,8 @@
 			"destination" : "lib/quad_description",
 			"paths" : 
 			[
-				"scripts/PID.py",
 				"scripts/LQR.py",
+				"scripts/LQI.py",
 				"scripts/MPCNode5.py",
 				"scripts/MPCNode6.py",
 				"scripts/trajectory_visualizer.py",

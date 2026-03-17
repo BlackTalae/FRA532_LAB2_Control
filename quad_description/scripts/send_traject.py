@@ -399,7 +399,7 @@ class TrajectoryNode(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    MODE = 'HOVER'
+    MODE = 'HELIX'
     SPEED = 0.75
     ROUND_TRIP = True
     ALIGN_YAW = False
