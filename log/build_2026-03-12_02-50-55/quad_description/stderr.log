@@ -1,6 +1,0 @@
-[31mCMake Error at cmake_install.cmake:46 (file):
-  file INSTALL cannot find
-  "/home/pavaris/FRA532_LAB2_Control/quad_description/scripts/send_traject.py":
-  No such file or directory.
-
-[0m
